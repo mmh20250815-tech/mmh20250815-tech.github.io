@@ -1910,14 +1910,17 @@ function _yzLinkHost_(u) { var m = /^https?:\/\/([^\/?#:]+)/i.exec(String(u || "
 function _yzLinkItems_(b) { return (b && Array.isArray(b.items) ? b.items : []).filter(function (x) { return x && _yzLinkFix_(x.u); }).slice(0, YZ_LINK_MAX); }
 function _yzLinkLabel_(x) { return String(x && x.t || "").replace(/\s+/g, " ").trim() || _yzLinkHost_(_yzLinkFix_(x && x.u)) || "網站"; }
 var YZ_FILE_EXT = { pdf: "pdf", doc: "word", docx: "word", odt: "word", rtf: "word", txt: "word", xls: "excel", xlsx: "excel", ods: "excel", csv: "excel", ppt: "ppt", pptx: "ppt", odp: "ppt", png: "img", jpg: "img", jpeg: "img", gif: "img", webp: "img", bmp: "img" };
-var YZ_FILE_ICO = { pdf: "📕", word: "📘", excel: "📗", ppt: "📙", img: "🖼", file: "📄" };
-var YZ_FILE_NAME = { pdf: "PDF", word: "Word", excel: "Excel", ppt: "PPT", img: "圖片", file: "檔案" };
+var YZ_FILE_ICO = { pdf: "📕", word: "📘", excel: "📗", ppt: "📙", img: "🖼", file: "📄", folder: "📁" };
+var YZ_FILE_NAME = { pdf: "PDF", word: "Word", excel: "Excel", ppt: "PPT", img: "圖片", file: "檔案", folder: "資料夾" };
 function _yzLinkFileKind_(x) {
   var u = _yzLinkFix_(x && x.u), k = x && x.k;
   if (!u || k === "web" || k === "ext") return "";
   var m = /^https?:\/\/(?:docs|drive)\.google\.com\/(document|spreadsheets|presentation|file)\/(?:u\/\d+\/)?d\//i.exec(u);
   if (m) return m[1] === "document" ? "word" : m[1] === "spreadsheets" ? "excel" : m[1] === "presentation" ? "ppt" : "file";
   if (/^https?:\/\/drive\.google\.com\/(open|uc)\?/i.test(u) && /[?&]id=/i.test(u)) return "file";
+  if (/^https:\/\/drive\.usercontent\.google\.com\/(?:u\/\d+\/)?(?:download|uc)\?/i.test(u) && /[?&]id=/i.test(u)) return "file";
+  var c = typeof _yzCloudOf_ === "function" && YZ_CLOUD ? _yzCloudOf_(u) : null;
+  if (c) return c.dir ? "folder" : c.kind || "file";
   var e = (/\.([A-Za-z0-9]{2,5})$/.exec(u.split(/[?#]/)[0]) || [])[1], t = e ? YZ_FILE_EXT[e.toLowerCase()] : "";
   return t || (k === "file" ? "file" : "");
 }
@@ -2304,7 +2307,7 @@ function _yzSearchTitle_(t, toks, ch) {
   if (u0.k === "name" && us.length > 1) { sn = _yzSnipAt_(us[1].v, 0, toks, false); u0 = { k: "name" }; }
   else sn = _yzSnipOf_(u0, r.ns[r.i], toks);
   var out = { score: r.score, where: u0.k, snip: sn.snip, segs: sn.segs };
-  if (u0.k === "doc") { out.b = u0.b; out.ii = u0.ii; out.pg = u0.pg; }
+  if (u0.k === "doc") { out.b = u0.b; out.ii = u0.ii; out.pg = u0.pg; if (u0.fn !== undefined) { out.fs = u0.fs; out.fn = u0.fn; out.fpg = u0.fpg; } }
   return out;
 }
 function _yzSearch_(hb, q, ch) {
@@ -2330,7 +2333,7 @@ var YZ_DX_MAX = 40000, YZ_DX_PG = 300;
 function _yzDxKey_(u) {
   u = _yzLinkFix_(u);
   if (!u) return "";
-  var m = /^https:\/\/(?:docs|drive)\.google\.com\/(?:document|spreadsheets|presentation|file)\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]{10,200})/i.exec(u) || /^https:\/\/drive\.google\.com\/(?:open|uc)\?(?:[^#]*&)?id=([A-Za-z0-9_-]{10,200})/i.exec(u);
+  var m = /^https:\/\/(?:docs|drive)\.google\.com\/(?:document|spreadsheets|presentation|file)\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]{10,200})/i.exec(u) || /^https:\/\/drive\.google\.com\/(?:open|uc)\?(?:[^#]*&)?id=([A-Za-z0-9_-]{10,200})/i.exec(u) || /^https:\/\/drive\.usercontent\.google\.com\/(?:u\/\d+\/)?(?:download|uc)\?(?:[^#]*&)?id=([A-Za-z0-9_-]{10,200})/i.exec(u);
   var s = m ? "drive:" + m[1] : u;
   return "d" + _yzLinkTag_(s) + "x" + _yzLinkTag_("dx|" + s);
 }
@@ -2345,10 +2348,19 @@ function _yzDxUnits_(u, x, i, j) {
   var e = _YZ_DX && _yzDxKind_(x) ? _YZ_DX[_yzDxKey_(x.u)] : null;
   if (!e || !Array.isArray(e.p)) return;
   e.p.forEach(function (pg, k) {
-    var ls = String(pg || "").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
-    ls.forEach(function (l) { u.push({ k: "doc", v: l, b: i, ii: j, pg: k + 1, sq: 1 }); });
-    if (ls.length > 1) u.push({ k: "doc", v: ls.join(" "), b: i, ii: j, pg: k + 1, sq: 1 });
+    var ls = String(pg || "").split("\n").map(function (l) { return l.trim(); }).filter(Boolean), fo = e.f ? _yzDxFileOf_(e, k + 1) : null;
+    var mk = function (v) { var o = { k: "doc", v: v, b: i, ii: j, pg: k + 1, sq: 1 }; if (fo) { o.fs = fo.s; o.fn = fo.n; o.fpg = fo.pg; } return o; };
+    ls.forEach(function (l) { u.push(mk(l)); });
+    if (ls.length > 1) u.push(mk(ls.join(" ")));
   });
+}
+function _yzDxFileOf_(e, pg) {
+  if (!e || !Array.isArray(e.f) || !(pg >= 1)) return null;
+  for (var i = 0; i < e.f.length; i++) {
+    var f = e.f[i];
+    if (Array.isArray(f) && pg - 1 >= +f[2] && pg - 1 < +f[2] + +f[3]) return { s: String(f[0]), n: String(f[1] || ""), pg: pg - +f[2] };
+  }
+  return null;
 }
 function _yzDocsOf_(t, ch) {
   var out = [];
@@ -2417,7 +2429,10 @@ function _yzMediaSearch_(hb, q, ch, what) {
             us.forEach(function (x, i) { if (!x.pg) return; var n2 = 0; toks.forEach(function (tk) { if (r.ns[i].s.indexOf(tk) >= 0) n2++; }); if (n2 > (bp[x.pg] || 0)) bp[x.pg] = n2; });
             Object.keys(bp).forEach(function (k) { if (bp[k] > bn || (bp[k] === bn && +k < pg)) { bn = bp[k]; pg = +k; } });
           }
-          res.docs.push({ ch: c, t: t, b: d.b, ii: d.ii, kind: d.kind, key: d.key, tag: _yzLinkTag_(_yzLinkFix_(d.x.u)), label: _yzLinkLabel_(d.x), pg: pg, has: !!(_YZ_DX && _YZ_DX[d.key] && Array.isArray(_YZ_DX[d.key].p)), score: r.score, where: u0.k, snip: sn.snip, segs: sn.segs, ord: ord++ });
+          var dr = { ch: c, t: t, b: d.b, ii: d.ii, kind: d.kind === "file" && _YZ_DX && _YZ_DX[d.key] && _YZ_DX[d.key].k === "folder" ? "folder" : d.kind, key: d.key, tag: _yzLinkTag_(_yzLinkFix_(d.x.u)), label: _yzLinkLabel_(d.x), pg: pg, has: !!(_YZ_DX && _YZ_DX[d.key] && Array.isArray(_YZ_DX[d.key].p)), score: r.score, where: u0.k, snip: sn.snip, segs: sn.segs, ord: ord++ };
+          var fo = pg && _YZ_DX ? _yzDxFileOf_(_YZ_DX[d.key], pg) : null;
+          if (fo) { dr.fs = fo.s; dr.fn = fo.n; dr.fpg = fo.pg; }
+          res.docs.push(dr);
         });
       }
     });
@@ -2605,7 +2620,8 @@ function _yzSearchBubble_(q, hits, more, o) {
     var pg = _yzPageText_(h.t.page), label = (YZ_WHERE[h.where] && h.where !== "page" ? YZ_WHERE[h.where] : "");
     var dk = "";
     if (h.where === "doc") { var db = (h.t.blocks || [])[h.b], dx = db && db.t === "link" ? _yzLinkItems_(db)[h.ii] : null; dk = dx ? _yzDxKind_(dx) : ""; label = dk === "web" ? "🌐 嵌入的網頁裡的字" : "📄 文件裡的字"; }
-    var meta = [label ? label + "有符合" + (h.where === "doc" && h.pg && dk !== "web" ? "（第 " + h.pg + " 頁）" : "") : "", pg ? "📖 藥戰手冊 " + pg : ""].filter(Boolean).join("　");
+    var fpg = h.where === "doc" && h.fn !== undefined ? "（資料夾裡的「" + String(h.fn).split("／").pop().slice(0, 40) + "」" + (h.fpg ? "第 " + h.fpg + " 頁" : "") + "）" : "";
+    var meta = [label ? label + "有符合" + (fpg || (h.where === "doc" && h.pg && dk !== "web" ? "（第 " + h.pg + " 頁）" : "")) : "", pg ? "📖 藥戰手冊 " + pg : ""].filter(Boolean).join("　");
     var c = [
       { type: "text", text: h.ch.name, size: "xxs", color: YZ_ACCENT, weight: "bold", wrap: true },
       { type: "text", text: h.t.name, size: "sm", weight: "bold", wrap: true, color: "#1F1F1F" }
@@ -2615,7 +2631,7 @@ function _yzSearchBubble_(q, hits, more, o) {
     rows.push({ type: "box", layout: "vertical", paddingAll: "9px", spacing: "xs", action: _yzPB_("yz=t&t=" + h.t.id, "打開"), contents: c });
     var du = h.where === "doc" && o.furl ? o.furl(h) : "";
     if (du) rows.push({ type: "box", layout: "horizontal", paddingStart: "9px", paddingEnd: "9px", paddingBottom: "8px", action: { type: "uri", label: dk === "web" ? "打開這個網頁" : "打開這份文件", uri: du }, contents: [
-      { type: "text", text: dk === "web" ? "🌐 打開這個網頁" : "📄 打開這份文件" + (h.pg ? "（第 " + h.pg + " 頁）" : ""), size: "xs", weight: "bold", color: YZ_ACCENT, wrap: true, flex: 1 },
+      { type: "text", text: dk === "web" ? "🌐 打開這個網頁" : fpg ? "📁 打開資料夾裡的這個檔" + fpg : "📄 打開這份文件" + (h.pg ? "（第 " + h.pg + " 頁）" : ""), size: "xs", weight: "bold", color: YZ_ACCENT, wrap: true, flex: 1 },
       { type: "text", text: "›", size: "md", color: YZ_ACCENT, flex: 0 }
     ] });
   });
@@ -2843,6 +2859,44 @@ function _yzQzResultBubbles_(r, z) {
 function _yzQzPushCard_(z) {
   const exam = z.kind === "x";
   return { type: "bubble", size: "mega", header: _yzHead_("📘 藥戰手冊", (exam ? "📝 新的考試：" : "📋 新的問卷：") + z.title, z.to ? "請在 " + z.to + " 以前完成" : ""), body: { type: "box", layout: "vertical", spacing: "sm", paddingAll: "13px", contents: [ { type: "text", text: z.note || (exam ? "共 " + z.x.n + " 題、" + z.x.pass + " 分及格。" : "共 " + z.qs.length + " 題，幾分鐘就好。"), size: "sm", wrap: true, color: "#1F1F1F" }, _yzFoot_() ] }, footer: { type: "box", layout: "vertical", paddingAll: "10px", contents: [ { type: "button", style: "primary", color: YZ_ACCENT, height: "sm", action: _yzPB_("yz=qs&q=" + z.id, exam ? "開始考試" : "開始填寫") } ] } };
+}
+
+var YZ_CLOUD = true;
+var YZ_CLOUD_NAME = { gd: "Google 雲端硬碟", od: "OneDrive", sp: "OneDrive 公司版／SharePoint", dbx: "Dropbox", icl: "iCloud", pcl: "pCloud", mega: "MEGA", box: "Box", yd: "Yandex 雲端硬碟" };
+var YZ_CLOUD_ODK = { w: "word", x: "excel", p: "ppt", i: "img" };
+function _yzCloudExt_(name) {
+  var e = (/\.([A-Za-z0-9]{2,5})$/.exec(String(name || "").replace(/[?#].*$/, "")) || [])[1];
+  return e && typeof YZ_FILE_EXT === "object" ? YZ_FILE_EXT[e.toLowerCase()] || "" : "";
+}
+function _yzCloudSeg_(s) { try { return decodeURIComponent(String(s || "")); } catch (e) { return String(s || ""); } }
+function _yzCloudOf_(u0) {
+  var u = typeof _yzLinkFix_ === "function" ? _yzLinkFix_(u0) : String(u0 || "");
+  if (!u || !/^https:\/\//i.test(u)) return null;
+  var m, o = null;
+  if ((m = /^https:\/\/drive\.google\.com\/drive\/(?:u\/\d+\/)?(?:mobile\/)?folders\/([A-Za-z0-9_-]{10,200})/i.exec(u)) || (m = /^https:\/\/drive\.google\.com\/(?:embedded)?folderview\?(?:[^#]*&)?id=([A-Za-z0-9_-]{10,200})/i.exec(u))) o = { p: "gd", dir: true, id: m[1] };
+  else if ((m = /^https:\/\/1drv\.ms\/([a-z])\/[A-Za-z0-9!_~.%-]/i.exec(u))) o = { p: "od", dir: m[1].toLowerCase() === "f", kind: YZ_CLOUD_ODK[m[1].toLowerCase()] || "" };
+  else if (/^https:\/\/onedrive\.live\.com\//i.test(u) && /[?&](resid|id|redeem|cid|authkey)=/i.test(u)) o = { p: "od", dir: false, kind: "" };
+  else if ((m = /^https:\/\/([A-Za-z0-9-]+(?:-my)?\.sharepoint\.(?:com|cn|de|us))\/:([a-z]):\//i.exec(u))) o = { p: "sp", dir: m[2].toLowerCase() === "f", kind: YZ_CLOUD_ODK[m[2].toLowerCase()] || "", host: m[1].toLowerCase() };
+  else if ((m = /^https:\/\/(?:www\.)?dropbox\.com\/(s|scl\/fi|scl\/fo|sh)\/([A-Za-z0-9_-]{4,80})(?:\/([^?#]*))?/i.exec(u))) {
+    var dt = m[1].toLowerCase(), dn = dt === "s" || dt === "scl/fi" ? _yzCloudSeg_(String(m[3] || "").split("/").pop()) : "";
+    o = { p: "dbx", dir: dt === "scl/fo" || dt === "sh", kind: _yzCloudExt_(dn), nm: dn };
+  } else if ((m = /^https:\/\/dl\.dropboxusercontent\.com\/(?:s|scl\/fi)\/[A-Za-z0-9_-]{4,80}\/([^?#]+)/i.exec(u))) o = { p: "dbx", dir: false, kind: _yzCloudExt_(_yzCloudSeg_(m[1])), nm: _yzCloudSeg_(m[1]) };
+  else if ((m = /^https:\/\/(?:www\.)?icloud\.com(\.cn)?\/iclouddrive\/([A-Za-z0-9_-]{10,60})(?:#(.*))?$/i.exec(u))) { var inm = _yzCloudSeg_(m[3] || "").replace(/_/g, " ").trim(); o = { p: "icl", dir: false, kind: _yzCloudExt_(inm), g: m[2], cn: !!m[1], nm: inm }; }
+  else if ((m = /^https:\/\/(u|e|e1|my|u1)\.pcloud\.(?:link|com)\/publink\/show\?(?:[^#]*&)?code=([A-Za-z0-9]{5,80})/i.exec(u))) o = { p: "pcl", dir: false, kind: "", code: m[2], eu: /^e/i.test(m[1]) };
+  else if ((m = /^https:\/\/pc\.cd\/([A-Za-z0-9]{3,40})(?:[\/?#]|$)/i.exec(u))) o = { p: "pcl", dir: false, kind: "", short: m[1] };
+  else if ((m = /^https:\/\/mega\.(?:nz|co\.nz|io)\/file\/([A-Za-z0-9_-]{8})#([A-Za-z0-9_-]{43})(?:$|[?&\/])/i.exec(u)) || (m = /^https:\/\/mega\.(?:nz|co\.nz)\/#!([A-Za-z0-9_-]{8})!([A-Za-z0-9_-]{43})$/i.exec(u))) o = { p: "mega", dir: false, kind: "", h: m[1], k: m[2] };
+  else if ((m = /^https:\/\/mega\.(?:nz|co\.nz|io)\/folder\/([A-Za-z0-9_-]{8})#([A-Za-z0-9_-]{22})(?:\/file\/([A-Za-z0-9_-]{8}))?(?:$|[?&\/])/i.exec(u)) || (m = /^https:\/\/mega\.(?:nz|co\.nz)\/#F!([A-Za-z0-9_-]{8})!([A-Za-z0-9_-]{22})(?:!([A-Za-z0-9_-]{8}))?$/i.exec(u))) o = { p: "mega", dir: !m[3], kind: "", fh: m[1], fk: m[2], nh: m[3] || "" };
+  else if ((m = /^https:\/\/((?:[A-Za-z0-9-]+\.)?app\.box\.com|[A-Za-z0-9-]+\.box\.com)\/(s|v)\/([A-Za-z0-9_-]{4,80})(?:\/(file|folder)\/(\d{1,20}))?(?:$|[?#\/])/i.exec(u))) o = { p: "box", dir: m[4] === "folder", kind: "", host: m[1].toLowerCase(), t: m[2].toLowerCase(), sh: m[3], sub: m[4] ? m[4].toLowerCase() : "", sid: m[5] || "" };
+  else if ((m = /^https:\/\/(?:disk\.yandex\.(?:ru|com|by|kz|ua|com\.tr|az|com\.am|co\.il|lt|lv|ee|uz)|disk\.360\.yandex\.(?:ru|com)|yadi\.sk)\/(d|i)\/([A-Za-z0-9_-]{6,80})(?:$|[?#\/])/i.exec(u))) o = { p: "yd", dir: false, kind: "", t: m[1].toLowerCase(), id: m[2] };
+  if (!o) return null;
+  o.name = YZ_CLOUD_NAME[o.p] || "雲端硬碟";
+  o.u = u;
+  if (o.dir) o.kind = "";
+  return o;
+}
+function _yzCloudDe_(name) { name = String(name || ""); return name + (/[A-Za-z0-9]$/.test(name) ? " 的" : "的"); }
+function _yzCloudLabel_(c) {
+  return c ? _yzCloudDe_(c.name) + (c.dir ? "資料夾" : "檔") : "";
 }
 
 var FlexView = (function () {
@@ -3102,6 +3156,8 @@ function bk41Warn(what) {
 function bk51Ok() { return backAtLeast(12, 18); }
 var V3 = 0;
 function bk52Ok() { var m = /v(\d+)\.(\d+)/.exec(BACKV || ""); return !!m && (+m[1] > 12 || (+m[1] === 12 && +m[2] >= 19)) && V3 >= 52; }
+function bk55Ok() { var m = /v(\d+)\.(\d+)/.exec(BACKV || ""); return !!m && (+m[1] > 12 || (+m[1] === 12 && +m[2] >= 22)) && V3 >= 55; }
+YZ_CLOUD = false;
 function bk51Warn(what) {
   modal({ title: "⚠ 還不能用「" + what + "」", lines: ["藥戰手冊專案（Apps Script）的「02_藥戰手冊」還是舊的（第 51 批以前）：照片、畫上去的東西（畫筆、箭頭、圈圈、加底色的字）存了會不見。", "請先把第 51 批的 02 貼上，「部署 → 管理部署作業 → ✏️ → 版本選新版本 → 部署」，再重新整理這一頁。"], buttons: [{ label: "知道了", cls: "sm pri" }] });
 }
@@ -3119,7 +3175,7 @@ function applyCfg() {
 (function () {
   var qs = location.search || ""; if (!/[?&](x|app|dev|k)=/.test(qs)) return;
   var p = new URLSearchParams(qs), f = [];
-  ["x", "app", "dev", "k", "t", "edit", "f", "w", "p", "q"].forEach(function (k) { if (p.get(k)) f.push(k + "=" + encodeURIComponent(p.get(k))); });
+  ["x", "app", "dev", "k", "t", "edit", "f", "w", "p", "q", "fs"].forEach(function (k) { if (p.get(k)) f.push(k + "=" + encodeURIComponent(p.get(k))); });
   try { history.replaceState(null, "", location.pathname + "#" + f.join("&")); } catch (e) {  }
 })();
 function hashParams() { var o = {}; String(location.hash || "").replace(/^#/, "").split("&").forEach(function (kv) { var i = kv.indexOf("="); if (i > 0) { try { o[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); } catch (e) {  } } }); return o; }
@@ -3129,13 +3185,14 @@ var TICKET = /^[0-9a-z]{6,11}\.[0-9a-f]{24}$/.test(HP.k || "") ? HP.k : "";
 function keyLoad() { try { var o = JSON.parse(localStorage.getItem("hbk") || "null"); if (o && XRE.test(String(o.x || "")) && TRE.test(String(o.t || ""))) return o; } catch (e) {  } return null; }
 function bxLoad() { try { var v = localStorage.getItem("hbx"); if (XRE.test(v || "")) return v; } catch (e) {  } return ""; }
 function keySave() { if (!XRE.test(X) || !TRE.test(T)) return; try { localStorage.setItem("hbk", JSON.stringify({ x: X, t: T })); localStorage.setItem("hbx", X); } catch (e) {  } }
-function keyDrop() { try { var o = keyLoad(); if (o && o.x === X && o.t === T) localStorage.removeItem("hbk"); } catch (e) {  } }
-function bxDrop() { try { if (localStorage.getItem("hbx") === X) localStorage.removeItem("hbx"); var o = keyLoad(); if (o && o.x === X) localStorage.removeItem("hbk"); } catch (e) {  } }
+function keyDrop() { try { var o = keyLoad(); if (o && o.x === X && o.t === T) localStorage.removeItem("hbk"); } catch (e) {  } if (typeof offClear === "function") offClear(); }
+function bxDrop() { try { if (localStorage.getItem("hbx") === X) localStorage.removeItem("hbx"); var o = keyLoad(); if (o && o.x === X) localStorage.removeItem("hbk"); } catch (e) {  } if (typeof offClearAll === "function") offClearAll(); }
 var CFGX = ""; try { if (typeof window.HB_X === "string" && XRE.test(window.HB_X)) CFGX = window.HB_X; } catch (e) {  }
-var PCL_RE = /^([a-z0-9]{28}|[a-z0-9]{12})$/, PCL_A = "abcdefghijklmnopqrstuvwxyz0123456789", LK_RE = /^([a-z0-9]{16}|[a-z0-9]{5})$/;
+var PCR_A = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz", PCR_RE = /^[2-9A-HJ-NP-Za-kmnp-z]{12,16}$/, PCR_LK = /^[2-9A-HJ-NP-Za-kmnp-z]{5,9}$/;
+var PCL_RE = /^([a-z0-9]{28}|[a-z0-9]{12}|[2-9A-HJ-NP-Za-kmnp-z]{12,16})$/, PCL_A = "abcdefghijklmnopqrstuvwxyz0123456789", LK_RE = /^([a-z0-9]{16}|[a-z0-9]{5}|[2-9A-HJ-NP-Za-kmnp-z]{5,9})$/;
 var HASH0 = String(location.hash || "").replace(/^#/, "");
 var SCODE = PCL_RE.test(HASH0) ? HASH0 : "", SCOLD = false, SCERR = "";
-function lkOf(code) { return code.length === 12 ? code.slice(0, 5) : code.slice(0, 16); }
+function lkOf(code) { return code.length === 28 ? code.slice(0, 16) : code.slice(0, code.length - 7); }
 function lkSave(v) { try { if (v) sessionStorage.setItem("hblk", JSON.stringify({ lk: v, at: Date.now() })); else sessionStorage.removeItem("hblk"); } catch (e) {  } }
 function lkLoad() { try { var o = JSON.parse(sessionStorage.getItem("hblk") || "null"); if (o && LK_RE.test(String(o.lk || "")) && Date.now() - +o.at < 66e4) return String(o.lk); } catch (e) {  } return ""; }
 var PCLK = SCODE ? lkOf(SCODE) : lkLoad();
@@ -3154,7 +3211,7 @@ try {
 } catch (e) {  }
 window.addEventListener("hashchange", function () {
   var v = String(location.hash || "").replace(/^#/, "");
-  if (PCL_RE.test(v) || /^[a-z0-9]{12}$/.test(v)) { try { location.reload(); } catch (e) {  } }
+  if (PCL_RE.test(v)) { try { location.reload(); } catch (e) {  } }
 });
 
 var DK = (function () {
@@ -3208,16 +3265,29 @@ function pclKey7(code) {
     return k;
   });
 }
+function pclKey7n(code) {
+  var r = code.slice(0, code.length - 7), m = code.slice(code.length - 7);
+  return crypto.subtle.digest("SHA-256", new TextEncoder().encode("hbk3|" + r)).then(function (b) {
+    var u = new Uint8Array(b), k = "";
+    for (var i = 0; i < 7; i++) { var d = (PCR_A.indexOf(m.charAt(i)) - (((u[i * 2] << 8) | u[i * 2 + 1]) % 56) + 56) % 56; if (d >= 36) return ""; k += PCL_A.charAt(d); }
+    return k;
+  });
+}
 function scOld() {
   SCOLD = true; SCODE = ""; PCLK = ""; lkSave("");
   if (!X) { var sv = keyLoad(); X = CFGX || (sv ? sv.x : bxLoad()); if (!T && sv && sv.x === X) { T = sv.t; FROMSAVED = true; SAVED = sv; } }
 }
 function scResolve(cb) {
   if (!SCODE || X) { cb(); return; }
-  var c12 = SCODE.length === 12, blob = ""; try { var w = c12 ? window.HB_XC7 : window.HB_XC; if (typeof w === "string") blob = w; } catch (e) { blob = ""; }
+  var c28 = SCODE.length === 28, c12 = !c28, blob = ""; try { var w = c28 ? window.HB_XC : window.HB_XC7; if (typeof w === "string") blob = w; } catch (e) { blob = ""; }
   if (!blob) { if (c12 && typeof window.HB_XC === "string") { scOld(); cb(); return; } SCERR = "nocfg"; cb(); return; }
   if (!(window.crypto && crypto.subtle && typeof crypto.subtle.importKey === "function" && typeof crypto.subtle.deriveKey === "function" && typeof crypto.subtle.digest === "function" && window.TextEncoder && window.TextDecoder)) { cb(); return; }
-  var p; try { p = (c12 ? pclKey7(SCODE) : pclKey(SCODE)).then(function (k) { return scOpen(k, blob); }); } catch (e) { SCERR = "bad"; cb(); return; }
+  var tryNew = c12 && PCR_RE.test(SCODE), tryOld = c12 && /^[a-z0-9]{12}$/.test(SCODE);
+  var p; try {
+    p = c28 ? pclKey(SCODE).then(function (k) { return scOpen(k, blob); })
+      : (tryNew ? pclKey7n(SCODE).then(function (k) { return k ? scOpen(k, blob) : Promise.reject(new Error("bad")); }) : Promise.reject(new Error("bad")))
+        .catch(function (e) { if (!tryOld) throw e; return pclKey7(SCODE).then(function (k) { return scOpen(k, blob); }); });
+  } catch (e) { SCERR = "bad"; cb(); return; }
   p.then(function (x) {
     if (!XRE.test(x)) { if (c12) scOld(); else SCERR = "bad"; cb(); return; }
     X = x; try { localStorage.setItem("hbx", X); } catch (e) {  }
@@ -3266,11 +3336,14 @@ function call(fn, args, opt) {
           var e = new Error(msg || "後端沒有回應"); e.code = code; bad(e); return;
         }
         if (j.r && j.r.moved) { stop(String(j.r.err || ""), "moved"); return; }
+        if (typeof netOk === "function" && NET.off) netOk();
         ok(j.r);
       }, function (err) {
         if (sid !== SESS) return;
         if (n < tries) { setTimeout(go, 900 * n); return; }
-        var e = new Error("連不上後端（" + String(err && err.message || err) + "），網路好了再試一次"); e.net = true; bad(e);
+        var e = new Error("連不上後端（" + String(err && err.message || err) + "），網路好了再試一次"); e.net = true;
+        if (typeof netOff === "function" && !/等太久/.test(String(err && err.message))) netOff();
+        bad(e);
       });
     }
     go();
@@ -3531,7 +3604,7 @@ function scrLoginCode(why, r) {
 document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") LG.auto = 0; });
 
 var PC = { sec: "", ex: 0, busy: false, tm: 0, seq: 0, e: "", n: "" };
-var MSG_PC = "在電腦（或別的瀏覽器）上：打開 LINE 的「藥戰手冊」，按下面那排的「🔗 外部連結」→「🌐 網址」→「📋 自動複製」，貼到瀏覽器打開；網頁會請你填「🔑 短碼」（也在那張卡片上），再打員工編號＋姓名。";
+var MSG_PC = "在電腦（或別的瀏覽器）上：打開 LINE 的「藥戰手冊」，按下面那排的「🔗 外部連結」→「🌐 網址」→「📋 自動複製」，貼到瀏覽器打開；網頁會請你填「🔑 短碼」（看著卡片上的大字打進 4 格，或貼上），再打員工編號＋姓名。";
 function pcStop() { clearInterval(PC.tm); PC.tm = 0; }
 function pcSave() { try { if (PC.sec) sessionStorage.setItem("hbpc", JSON.stringify({ x: X, sec: PC.sec, ex: PC.ex })); else sessionStorage.removeItem("hbpc"); } catch (e) {  } }
 function pcLoad() {
@@ -3553,10 +3626,69 @@ function loginWhy(why, r, pc) {
   if (why === "forgot") return "✅ 這台電腦已經忘記你了：下次在這台登入，要再用 LINE 驗證碼。";
   return "";
 }
+function pcNorm(v) {
+  return String(v || "").replace(/[Ａ-Ｚａ-ｚ０-９]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 65248); }).replace(/[\s\u200b\-－–—_·.,，、]+/g, "");
+}
 function pcCodeOf(v) {
-  v = String(v || "").replace(/[\s\u200b]+/g, "").toLowerCase();
-  var m = /#([a-z0-9]{28}|[a-z0-9]{12})$/.exec(v) || /^([a-z0-9]{28}|[a-z0-9]{12})$/.exec(v);
-  return m ? m[1] : "";
+  v = pcNorm(v);
+  var m = /#([A-Za-z0-9]{12,28})$/.exec(v), c = m ? m[1] : v;
+  return PCR_RE.test(c) || /^[a-z0-9]{12}$/.test(c) || /^[a-z0-9]{28}$/.test(c) ? c : "";
+}
+function pcSplit(code) {
+  var n = code.length, b = Math.floor(n / 4), x = n % 4, out = [], p = 0;
+  for (var i = 0; i < 4; i++) { var len = b + (i < x ? 1 : 0); out.push(code.substr(p, len)); p += len; }
+  return out;
+}
+var PCC_N = 4, PCC_L = 4, PCC_MIN = 3;
+function pcBoxes(onEnter) {
+  var B = { ins: [], long: "" }, kids = [];
+  var clean = function (v) { return pcNorm(v).replace(/[^A-Za-z0-9]/g, ""); };
+  var focusAt = function (i) { try { B.ins[Math.max(0, Math.min(PCC_N - 1, i))].focus(); } catch (e) {  } };
+  var put = function (i, v) {
+    var k = i;
+    while (k < PCC_N) { B.ins[k].value = v.substr(0, PCC_L); v = v.substr(PCC_L); k++; if (!v) break; }
+  };
+  var fire = function (i, v) {
+    B.long = "";
+    var full = pcCodeOf(v);
+    if (full && full.length === 28) { B.long = full; B.ins.forEach(function (x, k) { x.value = full.substr(k * 7, PCC_L); }); focusAt(PCC_N - 1); return; }
+    if (full) { B.set(full); focusAt(PCC_N - 1); return; }
+    put(i, clean(v));
+    var k = i;
+    while (k < PCC_N - 1 && B.ins[k].value.length >= PCC_L) k++;
+    focusAt(k);
+  };
+  for (var i = 0; i < PCC_N; i++) (function (i) {
+    var inp = h("input", { class: "in pcc", type: "text", inputmode: "text", autocomplete: i ? "off" : "one-time-code", autocapitalize: "off", autocorrect: "off", spellcheck: "false", "aria-label": "短碼第 " + (i + 1) + " 格（3～4 碼）", "data-i": String(i) });
+    if (!i) inp.id = "pclin";
+    inp.oninput = function () { var v = inp.value; if (clean(v) !== v || v.length > PCC_L) fire(i, v); else if (v.length >= PCC_L && i < PCC_N - 1) focusAt(i + 1); };
+    inp.onkeydown = function (e) {
+      if (e.key === "Enter") { e.preventDefault(); onEnter(); return; }
+      if ((e.key === " " || e.key === "-" || e.key === "Spacebar") && i < PCC_N - 1) { e.preventDefault(); if (inp.value) focusAt(i + 1); return; }
+      if (e.key === "Backspace" && !inp.value && i > 0) { e.preventDefault(); B.ins[i - 1].value = B.ins[i - 1].value.slice(0, -1); focusAt(i - 1); return; }
+      if (e.key === "ArrowLeft" && i > 0 && (inp.selectionStart || 0) === 0) { e.preventDefault(); focusAt(i - 1); return; }
+      if (e.key === "ArrowRight" && i < PCC_N - 1 && (inp.selectionStart || 0) >= inp.value.length) { e.preventDefault(); focusAt(i + 1); }
+    };
+    inp.onpaste = function (e) {
+      var t = ""; try { t = (e.clipboardData || window.clipboardData).getData("text"); } catch (x) { t = ""; }
+      if (!t) return;
+      e.preventDefault(); fire(i, t);
+    };
+    inp.onfocus = function () { try { if (inp.value.length >= PCC_L) inp.select(); else inp.setSelectionRange(inp.value.length, inp.value.length); } catch (e) {  } };
+    B.ins.push(inp);
+    if (i) kids.push(h("span", { class: "pcc-d", "aria-hidden": "true" }, ["-"]));
+    kids.push(inp);
+  })(i);
+  B.el = h("div", { class: "pcc4", role: "group", "aria-label": "隨機驗證短碼（4 格）" }, kids);
+  B.get = function () { return B.long || B.ins.map(function (x) { return clean(x.value); }).join(""); };
+  B.set = function (code) {
+    B.long = ""; code = clean(code);
+    var g = code.length >= 12 && code.length <= 16 ? pcSplit(code) : [code.substr(0, 4), code.substr(4, 4), code.substr(8, 4), code.substr(12)];
+    B.ins.forEach(function (x, k) { x.value = g[k] || ""; });
+  };
+  B.clear = function () { B.long = ""; B.ins.forEach(function (x) { x.value = ""; }); };
+  B.focus = function () { for (var k = 0; k < PCC_N; k++) if (B.ins[k].value.length < PCC_MIN) return focusAt(k); focusAt(PCC_N - 1); };
+  return B;
 }
 function pcFine() {
   return h("p", { class: "lgfine" }, ["短碼 10 分鐘內有效、用一次就失效，只給你自己用，不要傳給任何人。這台電腦不會記住你，共用的電腦也可以放心用。", h("br"), "在手機上：" + MSG_LINE]);
@@ -3570,20 +3702,22 @@ function pcLinks(why, r) {
 function scrFirst(why, msg, r) {
   lgStop(); pcStop();
   var my = ++PC.seq;
-  var inp = h("input", { class: "in pccode", id: "pclin", type: "text", autocomplete: "off", autocapitalize: "off", spellcheck: "false", maxlength: "300", placeholder: "貼上短碼", "aria-label": "隨機驗證短碼", "aria-describedby": "pclm" });
   var m = h("div", { class: "scr-m lgm", id: "pclm", role: "status", "aria-live": "polite" }, [msg || ""]);
   var go = h("button", { class: "btn pri lggo", type: "button", id: "pclgo" }, ["下一步"]);
   var next = function () {
-    var code = pcCodeOf(inp.value);
-    if (!code) { m.textContent = "這不像 LINE 回的短碼：回 LINE 按「🔗 外部連結」→「🔑 短碼」→「📋 自動複製」，整組貼上來。"; try { inp.focus(); } catch (e) {  } return; }
+    var raw = boxes.get(), code = pcCodeOf(raw);
+    if (!code) {
+      m.textContent = raw ? "短碼還沒打完（或打錯了）：照 LINE 卡片上的 4 組打，總共 12～16 碼，大小寫要跟卡片一樣（只有英文、數字；沒有 0、O、1、l、I）。打完一組按空白鍵跳下一格；可以複製的話，按「📋 自動複製」貼在第一格會自動分好。" : "這不像 LINE 回的短碼：回 LINE 按「🔗 外部連結」→「🔑 短碼」，看著卡片上的大字打進 4 格，或按「📋 自動複製」整組貼上來。";
+      boxes.focus(); return;
+    }
     PCLK = lkOf(code); lkSave(PCLK);
     if (canLogin()) { SCODE = ""; scrLoginPc("", r); return; }
     SCODE = code; SCOLD = false; SCERR = ""; X = ""; T = ""; FROMSAVED = false;
     go.disabled = true; m.textContent = "確認中…";
     start();
   };
+  var boxes = pcBoxes(next);
   go.onclick = next;
-  inp.onkeydown = function (e) { if (e.key === "Enter") next(); };
   var lines = [];
   var w0 = r ? loginWhy(r.why || "", r, true) : "";
   if (w0) lines.push(w0);
@@ -3593,14 +3727,14 @@ function scrFirst(why, msg, r) {
   screen([logo(), h("h2", {}, ["🔐 登入藥戰手冊"]),
     lines.length ? h("div", { class: "scr-p" }, lines.map(function (l) { return h("p", {}, [l]); })) : null,
     h("div", { class: "pcbox", id: "pcstep0" }, [
-      h("div", { class: "lgst" }, ["① 填入", h("b", {}, ["隨機驗證短碼"]), "：在 LINE 的「藥戰手冊」按下面那排的「", h("b", {}, ["🔗 外部連結"]), "」→「", h("b", {}, ["🔑 短碼"]), "」→「", h("b", {}, ["📋 自動複製"]), "」，貼在這裡"]),
-      h("div", { class: "pclrow" }, [inp, go]), m,
+      h("div", { class: "lgst" }, ["① 填入", h("b", {}, ["隨機驗證短碼"]), "：在手機 LINE 的「藥戰手冊」按下面那排的「", h("b", {}, ["🔗 外部連結"]), "」→「", h("b", {}, ["🔑 短碼"]), "」，看著卡片上的大字", h("b", {}, ["一格一格打在下面（照卡片的 4 組；大小寫要一樣）"]), "，打完一組按空白鍵跳下一格；可以複製的時候，按卡片上的「", h("b", {}, ["📋 自動複製"]), "」貼在第一格就會自動分好。"]),
+      boxes.el, h("div", { class: "pclrow pcc4b" }, [go]), m,
       h("div", { class: "lgst2 pcnext" }, ["② 下一步：打你的員工編號和姓名"])]),
     pcFine(),
     !why && !canLogin() ? h("p", { class: "lgfine" }, ["（藥戰手冊是自己的 LINE 帳號：還沒加的話，補藥神器下面那排的「📘 藥戰手冊」就是加入的按鈕。）"]) : null,
     KEEP_ED || (typeof KEEP_QE !== "undefined" && KEEP_QE) ? h("p", { class: "lockkeep" }, ["✏️ 你有還沒儲存的修改：登入以後會接著編輯（還沒存進去）。"]) : null,
     pcLinks(why, r)], "lgscr pcscr pclscr");
-  setTimeout(function () { if (my === PC.seq) { try { inp.focus(); } catch (e) {  } } }, 30);
+  setTimeout(function () { if (my === PC.seq) boxes.focus(); }, 30);
 }
 function scrLoginPc(why, r) {
   r = r || {};
@@ -3618,7 +3752,7 @@ function scrLoginPc(why, r) {
   var step1 = h("div", { class: "pcbox", id: "pcstep1" }, [
     h("div", { class: "pclhint", id: "pclhint" }, ["✅ 隨機驗證短碼填好了（10 分鐘內有效）　", again]),
     h("div", { class: "lgst" }, ["② 打你的", h("b", {}, ["員工編號"]), "和", h("b", {}, ["姓名"]), "（要跟申請時填的一樣）"]),
-    h("div", { class: "scr-form" }, [h("label", {}, [h("span", {}, ["員工編號", h("small", { class: "pcaa" }, ["（英文字母大小寫都可以）"])]), emp]), h("label", {}, [h("span", {}, ["姓名"]), nm])]),
+    h("div", { class: "scr-form" }, [h("label", {}, [h("span", {}, ["員工編號"]), emp]), h("label", {}, [h("span", {}, ["姓名"]), nm])]),
     h("div", { class: "scr-b" }, [go]), m]);
   var box = screen([logo(), h("h2", {}, ["🔐 登入藥戰手冊"]),
     lines.length ? h("div", { class: "scr-p" }, lines.map(function (l) { return h("p", {}, [l]); })) : null,
@@ -3742,7 +3876,10 @@ function boot() {
     onBoot(r);
   }, bootNo);
 }
-function bootNo(e) { scrMsg("沒辦法打開", [e && e.message || "後端沒有回應。", "可以按「再試一次」；一直不行的話，把這個畫面截圖給開發者。"], [retryBtn()]); }
+function bootNo(e) {
+  if (e && e.net && typeof offBoot === "function") { offBoot(e); return; }
+  scrMsg("沒辦法打開", [e && e.message || "後端沒有回應。", "可以按「再試一次」；一直不行的話，把這個畫面截圖給開發者。"], [retryBtn()]);
+}
 function scrLoad() {
   var more = h("div", { class: "bootmore", hidden: true }, [
     h("p", { class: "muted" }, ["比平常久：可能是網路比較慢，或藥戰手冊的後端剛睡醒（很久沒人用、剛部署完的第一次會比較久，最多大約半分鐘）。"]),
@@ -3825,7 +3962,8 @@ function fvFromHash() {
   if (!it || _yzLinkTag_(it.u) !== m[3]) (t && t.blocks || []).forEach(function (bb) { if (bb && bb.t === "link") _yzLinkItems_(bb).forEach(function (x) { if (_yzLinkTag_(x.u) === m[3]) it = x; }); });
   if (it && !_yzLinkFileKind_(it)) { wvOpen({ u: it.u, label: _yzLinkLabel_(it), tid: HP.t, bi: +m[1], ii: +m[2], tag: m[3], auto: !it.k, ext: it.k === "ext" }); return; }
   var pg = /^\d{1,4}$/.test(String(HP.p || "")) ? +HP.p : 0, hl = HP.q ? _yzTokens_(String(HP.q).slice(0, 30)) : [];
-  fvOpen({ tid: HP.t, bi: +m[1], ii: +m[2], tag: m[3], label: it ? _yzLinkLabel_(it) : "檔案", kind: it ? _yzLinkFileKind_(it) : "", u: it ? it.u : "", auto: !!it && !it.k, page: pg, hl: hl.length ? hl : null, two: !!(it && it.two === true) });
+  var fs = YZ_CLOUD && HP.fs && String(HP.fs).length <= 400 && !/[\u0000-\u001F\u007F]/.test(String(HP.fs)) ? String(HP.fs) : "";
+  fvOpen({ tid: HP.t, bi: +m[1], ii: +m[2], tag: m[3], label: it ? _yzLinkLabel_(it) : "檔案", kind: fs ? "folder" : it ? _yzLinkFileKind_(it) : "", u: it ? it.u : "", auto: !!it && !it.k, page: pg, hl: hl.length ? hl : null, two: !!(it && it.two === true), sub: fs });
 }
 var IDLE_MS = 30 * 6e4, LAST_ACT = Date.now(), LAST_PING = 0, TAB = "view";
 function refreshData() {
@@ -3834,6 +3972,7 @@ function refreshData() {
     if (x.st === "lock") { logout("expired"); return; }
     if (!x.data) return;
     HB = x.data; if (x.cfg) { CFG = x.cfg; applyCfg(); }
+    if (typeof offSave === "function") { NET.cached = 0; NET.lastSave = 0; offSave(x); if (NET.off) netBar(true); }
     if (typeof xvNoLoad === "function") xvNoLoad(x.wno);
     if (typeof edBaseChanged === "function") edBaseChanged();
     if (TAB === "view") { if (typeof bkSave === "function") bkSave(); drawWeb(); }
@@ -3844,7 +3983,9 @@ function enterMain(r) {
   stopPolls();
   OUTED = false;
   HB = r.data; CFG = r.cfg || CFG || {}; ME = r.me || {}; IS_DEV = r.st === "dev"; if (r.v) BACKV = String(r.v);
+  if (typeof offSave === "function") { if (r.cached) NET.cached = 1; else { NET.cached = 0; NET.lastSave = 0; offSave(r); } }
   V3 = +r.v3 || 0;
+  YZ_CLOUD = bk55Ok();
   if (typeof xvNoLoad === "function") xvNoLoad(r.wno);
   ABN = IS_DEV && !!r.abn;
   applyCfg();
@@ -3868,13 +4009,14 @@ function enterMain(r) {
   buildView();
   if (IS_DEV) { buildEditPane(); buildAdminPane(); }
   syncTabsH();
+  if (typeof netBar === "function" && NET.off) netBar(true);
   var qeBack = IS_DEV && typeof qeRestore === "function" && qeRestore();
   var tw = 300;
   if (IS_DEV && KEEP_ED) { edRestore(KEEP_ED); KEEP_ED = null; showTab("edit"); toast("接著剛剛還沒儲存的修改（還沒存進手冊）"); tw = 3600; }
   else if (qeBack) { ED.mode = "qz"; ED.cur = { kind: "qz", id: "" }; ED.view = "web"; showTab("edit"); toast("接著剛剛還沒儲存的問卷（還沒存進問卷試算表）"); tw = 3600; }
   else if (IS_DEV && HP.edit && edTitleExists(HP.edit)) { gotoEdit(HP.edit); }
   else { showTab("view"); if (HP.t && titleOf(HP.t)) { openTitle(HP.t); fvFromHash(); } }
-  HP.t = HP.edit = HP.f = HP.w = HP.p = HP.q = "";
+  HP.t = HP.edit = HP.f = HP.w = HP.p = HP.q = HP.fs = "";
   idleTick();
   guardSync();
   if (r.last && r.last.at) { var lst = r.last, sid0 = SESS; setTimeout(function () { if (MAIN && sid0 === SESS) lgNote(lst); }, tw); }
@@ -4077,6 +4219,7 @@ function logout(why) {
   if (IS_DEV && typeof ED !== "undefined" && ED && ED.dirty) KEEP_ED = edKeep();
   if (IS_DEV && typeof qeKeep === "function") { KEEP_QE = qeKeep() || KEEP_QE; qeDrop(); }
   MAIN = false; OUTED = true;
+  if (typeof offClear === "function") { offClear(); NET.cached = 0; }
   var lgn = $("#lgnote"); if (lgn) lgn.remove();
   guardSync();
   lockClean();
@@ -4108,14 +4251,20 @@ function catBlob(cat, cb) {
   if (CATBLOB.fid === cat.fid && CATBLOB.busy) return "";
   catBlobDrop(); CATBLOB.fid = cat.fid; CATBLOB.busy = true;
   var sid = SESS, fid = cat.fid;
+  var put = function (x) { var bin = atob(x.b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); CATBLOB.url = URL.createObjectURL(new Blob([u], { type: x.mime || "image/jpeg" })); };
+  var fromOff = function () {
+    if (typeof offLoadCat !== "function") { CATBLOB.busy = false; CATBLOB.err = true; if (cb) cb(); return; }
+    offLoadCat(fid).then(function (o) { if (sid !== SESS || CATBLOB.fid !== fid) return; CATBLOB.busy = false; if (o) put(o); else CATBLOB.err = true; if (cb) cb(); }, function () { if (CATBLOB.fid !== fid) return; CATBLOB.busy = false; CATBLOB.err = true; if (cb) cb(); });
+  };
+  if (NET.cached && typeof offLoadCat === "function") { fromOff(); return ""; }
   call("hbCatImg", []).then(function (x) {
     if (sid !== SESS || CATBLOB.fid !== fid) return;
     CATBLOB.busy = false;
     if (!x || !x.b64) { CATBLOB.err = true; if (x && x.st === "lock") { logout("expired"); return; } if (cb) cb(); return; }
-    var bin = atob(x.b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-    CATBLOB.url = URL.createObjectURL(new Blob([u], { type: x.mime || "image/jpeg" }));
+    put(x);
+    if (typeof offSaveCat === "function") offSaveCat(fid, x);
     if (cb) cb();
-  }, function () { if (CATBLOB.fid !== fid) return; CATBLOB.busy = false; CATBLOB.err = true; if (cb) cb(); });
+  }, function (e) { if (CATBLOB.fid !== fid) return; if (e && e.net) { fromOff(); return; } CATBLOB.busy = false; CATBLOB.err = true; if (cb) cb(); });
   return "";
 }
 
@@ -4131,6 +4280,7 @@ function backendCheck(cb) {
 function start() {
   APP = $("#app");
   if (window.top !== window.self) { try { document.documentElement.innerHTML = ""; } catch (e) {  } return; }
+  if (typeof offStart === "function") offStart();
   scResolve(function () { backendCheck(function () {
     gate(function (g) {
       if (g === "ok") { API = "https://script.google.com/macros/s/" + X + "/exec"; boot(); return; }
@@ -4142,6 +4292,128 @@ function start() {
       scrFirst(SCOLD ? "old" : "");
     });
   }); });
+}
+
+var NET = { off: false, cached: 0, at: 0, bar: null, tm: 0, wait: false, saving: false, lastSave: 0, sw: "" };
+var OFF_TTL = 24 * 36e5, OFF_DB = "hboff", OFF_STORE = "c";
+
+function swReg() {
+  try {
+    if (!("serviceWorker" in navigator) || !/^https?:$/.test(location.protocol) || window.top !== window.self) return;
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function (reg) { NET.sw = reg && reg.scope ? "ok" : "no"; }, function () { NET.sw = "no"; });
+  } catch (e) { NET.sw = "no"; }
+}
+
+function offDb() {
+  return new Promise(function (ok, bad) {
+    try {
+      var r = indexedDB.open(OFF_DB, 1);
+      r.onupgradeneeded = function () { try { r.result.createObjectStore(OFF_STORE); } catch (e) {  } };
+      r.onsuccess = function () { ok(r.result); };
+      r.onerror = function () { bad(r.error || new Error("idb")); };
+      r.onblocked = function () { bad(new Error("idb blocked")); };
+    } catch (e) { bad(e); }
+  });
+}
+function offTx(mode, fn) {
+  return offDb().then(function (d) {
+    return new Promise(function (ok, bad) {
+      var out, tx;
+      try { tx = d.transaction(OFF_STORE, mode); out = fn(tx.objectStore(OFF_STORE)); } catch (e) { d.close(); bad(e); return; }
+      tx.oncomplete = function () { d.close(); ok(out && out.result !== undefined ? out.result : undefined); };
+      tx.onerror = function () { d.close(); bad(tx.error || new Error("idb tx")); };
+      tx.onabort = function () { d.close(); bad(tx.error || new Error("idb abort")); };
+    });
+  });
+}
+function offKey() {
+  if (!(window.crypto && crypto.subtle && window.TextEncoder && DK && T && X)) return Promise.reject(new Error("nokey"));
+  return crypto.subtle.digest("SHA-256", new TextEncoder().encode("hboff|" + DK + "|" + T + "|" + X)).then(function (b) { return crypto.subtle.importKey("raw", b, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]); });
+}
+function offPut(key, body) {
+  var iv = new Uint8Array(12);
+  try { crypto.getRandomValues(iv); } catch (e) { return Promise.reject(e); }
+  return offKey().then(function (k) { return crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, k, new TextEncoder().encode(JSON.stringify(body))); })
+    .then(function (ct) { return offTx("readwrite", function (st) { return st.put({ iv: Array.prototype.slice.call(iv), ct: ct, at: body.at || Date.now(), x: X }, key); }); });
+}
+function offGet(key) {
+  return offTx("readonly", function (st) { return st.get(key); }).then(function (rec) {
+    if (!rec || !rec.ct || !rec.iv || Date.now() - (+rec.at || 0) > OFF_TTL) { if (rec) offDel(key); return null; }
+    return offKey().then(function (k) { return crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(rec.iv) }, k, rec.ct); })
+      .then(function (buf) { return JSON.parse(new TextDecoder("utf-8").decode(buf)); })
+      .catch(function () { offDel(key); return null; });
+  }).catch(function () { return null; });
+}
+function offDel(key) { try { offTx("readwrite", function (st) { return st.delete(key); }).catch(function () {  }); } catch (e) {  } }
+function offSave(r) {
+  if (!r || !r.data || r.cached || NET.saving || Date.now() - NET.lastSave < 30000) return;
+  NET.saving = true;
+  offPut(X, { data: r.data, me: r.me || ME, cfg: r.cfg || CFG, v: r.v || BACKV, v3: r.v3 || V3, wno: r.wno, at: Date.now() })
+    .then(function () { NET.saving = false; NET.lastSave = Date.now(); }, function () { NET.saving = false; });
+}
+function offLoad() { return offGet(X).then(function (o) { if (!(o && o.data)) { offClear(); return null; } return o; }); }
+function offSaveCat(fid, x) {
+  if (!fid || !x || !x.b64 || NET.catSaved === fid) return;
+  NET.catSaved = fid;
+  offPut(X + "|cat", { fid: fid, mime: x.mime || "image/jpeg", b64: x.b64, at: Date.now() }).catch(function () { NET.catSaved = ""; });
+}
+function offLoadCat(fid) { return offGet(X + "|cat").then(function (o) { return o && o.fid === fid && o.b64 ? o : null; }); }
+function offClear() { offDel(X); offDel(X + "|cat"); NET.catSaved = ""; }
+function offClearAll() { try { offTx("readwrite", function (st) { return st.clear(); }).catch(function () {  }); } catch (e) {  } NET.catSaved = ""; }
+
+function offAgo(at) { var m = Math.max(0, Math.round((Date.now() - at) / 6e4)); return m < 1 ? "剛剛" : m < 60 ? m + " 分鐘前" : Math.round(m / 60) + " 小時前"; }
+function netBarText() {
+  if (NET.cached) return "📴 離線中（連不到後端）：看的是 " + offAgo(NET.at) + " 存在這台的手冊；搜尋照常。網路好了會自動換成最新的。";
+  if (MAIN) return "📴 離線中（網路不穩）：已經打開的內容照常看、搜尋照常；存檔、看檔案要等網路好了，會自動接回去。";
+  return "📴 離線中：登入要有網路，網路好了會自動再試。";
+}
+function netBarH() { try { var hgt = NET.bar ? NET.bar.offsetHeight : 0; document.documentElement.style.setProperty("--offh", hgt + "px"); if (typeof syncTabsH === "function" && MAIN) syncTabsH(); } catch (e) {  } }
+function netBar(on) {
+  if (!on) { if (NET.bar) { NET.bar.remove(); NET.bar = null; } document.documentElement.classList.remove("hb-off"); try { document.documentElement.style.removeProperty("--offh"); } catch (e) {  } return; }
+  if (!NET.bar) {
+    NET.bar = h("div", { class: "offbar", id: "offbar", role: "status", "aria-live": "polite" }, [h("span", { class: "offbar-t" }, [""]), btn("🔄 重試", function () { netRetry(true); }, "sm offbar-b")]);
+    document.body.insertBefore(NET.bar, document.body.firstChild);
+    document.documentElement.classList.add("hb-off");
+    try { window.addEventListener("resize", netBarH); } catch (e) {  }
+  }
+  NET.bar.querySelector(".offbar-t").textContent = netBarText();
+  netBarH();
+}
+function netOff() {
+  if (!NET.off) { NET.off = true; netBar(true); }
+  else if (NET.bar) netBar(true);
+  if (!NET.tm) NET.tm = setInterval(function () { netRetry(false); }, 20000);
+}
+function netOk() {
+  if (!NET.off) return;
+  NET.off = false; netBar(false);
+  if (NET.tm) { clearInterval(NET.tm); NET.tm = 0; }
+  if (NET.cached && MAIN) { toast("🌐 網路回來了：換成最新的手冊"); refreshData(); }
+  if (NET.wait) { NET.wait = false; SESS++; boot(); }
+}
+function netRetry(manual) {
+  if (NET.wait) { NET.wait = false; SESS++; boot(); return; }
+  if (MAIN) { if (NET.cached) { call("hbData", []).then(function (x) { if (x && x.data) { netOk(); } }, function () { if (manual) netBar(true); }); return; } call("hbPing", []).then(function () { netOk(); }, function () { if (manual) netBar(true); }); return; }
+  if (manual) netBar(true);
+}
+function offBoot(e) {
+  offLoad().then(function (c) {
+    if (c && c.data) {
+      NET.cached = 1; NET.at = +c.at || Date.now();
+      netOff();
+      onBoot({ st: c.me && c.me.dev ? "dev" : "ok", data: c.data, me: c.me, cfg: c.cfg, v: c.v, v3: c.v3, wno: c.wno, cached: 1 });
+      return;
+    }
+    NET.wait = true; netOff();
+    scrMsg("📴 離線中（連不到後端）", ["網路不好、或藥戰手冊的後端現在連不到。這台還沒有存著可以離線看的內容（要先在有網路的時候打開一次）。", "網路好了會自動再試；也可以按「再試一次」。", e && e.message ? "（" + e.message + "）" : ""].filter(Boolean), [retryBtn()]);
+  });
+}
+function offStart() {
+  try {
+    window.addEventListener("offline", function () { netOff(); });
+    window.addEventListener("online", function () { netRetry(false); });
+  } catch (e) {  }
+  swReg();
 }
 
 
@@ -4544,7 +4816,7 @@ function webLink1(x, i, ctx, hl) {
       var go = function (e) { if (e) e.preventDefault(); var g = Date.now(), au = !x.k, tw = x.two === true; if (ctx.pv) fvOpen({ try: u, label: lab, kind: fk, auto: au, gest: g, two: tw }); else if (ctx.tid) fvOpen({ tid: ctx.tid, bi: ctx.bi, ii: i, tag: _yzLinkTag_(u), label: lab, kind: fk, u: u, auto: au, gest: g, two: tw }); };
       return h("a", { class: "xlink xfile", href: "#", role: "button", "data-k": fk, title: "在手冊裡看（只能看）：" + lab, onclick: go, onkeydown: function (e) { if (e.key === " ") go(e); } }, [
         h("span", { class: "xl-i", "aria-hidden": "true" }, [YZ_FILE_ICO[fk] || "📄"]),
-        h("span", { class: "xl-t" }, [h("b", {}, hlNodes(lab, hl)), h("small", {}, hlNodes(YZ_FILE_NAME[fk] + "｜在手冊裡看（只能看）" + (n ? "｜" + n : ""), hl))]),
+        h("span", { class: "xl-t" }, [h("b", {}, hlNodes(lab, hl)), h("small", {}, hlNodes(xlKindName(u, fk) + "｜在手冊裡看（只能看）" + (n ? "｜" + n : ""), hl))]),
         h("span", { class: "xl-o", "aria-hidden": "true" }, ["›"])
       ]);
     }
@@ -4561,6 +4833,10 @@ function webLink1(x, i, ctx, hl) {
       h("span", { class: "xl-o", "aria-hidden": "true" }, [ext ? "↗" : "›"])
     ]);
   }
+}
+function xlKindName(u, fk) {
+  var cl = YZ_CLOUD && typeof _yzCloudOf_ === "function" ? _yzCloudOf_(u) : null;
+  return cl ? _yzCloudDe_(cl.name) + (fk === "folder" ? "資料夾" : fk === "file" ? "檔" : " " + YZ_FILE_NAME[fk]) : YZ_FILE_NAME[fk];
 }
 function xlSmall() {
   try { return window.matchMedia("(pointer: fine)").matches && (window.screen.availWidth || innerWidth) >= 900 && !/Line\/|Android|iPhone|iPad/i.test(navigator.userAgent); } catch (e) { return false; }
@@ -5264,6 +5540,7 @@ FvCMap.prototype.fetch = function (o) {
 function fvIco(k) { return (YZ_FILE_ICO && YZ_FILE_ICO[k]) || "📄"; }
 function fvClose(fromPop) {
   FV.seq++;
+  FV.fold = null; FV.sub = ""; FV.bkb = null; FV.ic = null;
   var many = !!(FV.web && FV.web.n > 1);
   if (FV.io) { try { FV.io.disconnect(); } catch (e) {  } FV.io = null; }
   if (FV.task) { try { FV.task.destroy(); } catch (e) {  } FV.task = null; }
@@ -5341,6 +5618,8 @@ function fvOpen(o) {
   var zf = h("button", { class: "btn sm fv-z fv-zf", type: "button", title: o.src ? "整張放進視窗" : "照視窗的寬度", disabled: true }, [o.src ? "整張" : "適合寬度"]);
   var zi = h("button", { class: "btn sm fv-z", type: "button", "aria-label": "放大", title: "放大", disabled: true }, ["＋"]);
   var xb = h("button", { class: "btn sm fv-x", type: "button", "aria-label": "關掉", title: "關掉（Esc）" }, ["✕"]);
+  var bkb = h("button", { class: "btn sm fv-bk", type: "button", hidden: true, title: "回到資料夾裡的檔的清單", onclick: function () { fvFoldBack(); } }, ["‹", h("span", { class: "fv-bkt" }, [" 資料夾"])]);
+  var ic = h("span", { class: "fv-ic", "aria-hidden": "true" }, [fvIco(o.sub ? o.subKind || "file" : o.kind)]);
   var tb = h("button", { class: "btn sm fv-two", type: "button", hidden: true, "aria-pressed": "false" }, [h("span", { class: "fv-twi", "aria-hidden": "true" }, ["▯▯"]), h("span", { class: "fv-twt" }, [o.src ? "兩張" : "兩頁"])]);
   var nvP = h("button", { class: "btn sm fv-nv", type: "button", hidden: true, "aria-label": "上一張", title: "上一張（←）" }, ["‹"]), nvN = h("button", { class: "btn sm fv-nv", type: "button", hidden: true, "aria-label": "下一張", title: "下一張（→）" }, ["›"]);
   tb.onclick = function () { fvTwo(!FV.two); };
@@ -5349,44 +5628,135 @@ function fvOpen(o) {
   var body = h("div", { class: "fv-b", tabindex: "0", "aria-label": "檔案內容" }, [msg]);
   FV.goto = Math.max(0, Math.floor(+o.page || 0)); FV.hl = o.hl && o.hl.length && !o.src ? o.hl.slice(0, 8) : null;
   var fb = FV.hl ? fvFindBar() : null;
-  var inner = h("div", { class: "fv-in" }, [h("div", { class: "fv-h" }, [h("span", { class: "fv-ic", "aria-hidden": "true" }, [fvIco(o.kind)]), h("div", { class: "fv-tt" }, [title, pg]), nvP, nvN, tb, h("div", { class: "fv-zs" }, [zo, zf, zi]), fvGoBtn(o.go), xb]), fb, body,
+  var inner = h("div", { class: "fv-in" }, [h("div", { class: "fv-h" }, [bkb, ic, h("div", { class: "fv-tt" }, [title, pg]), nvP, nvN, tb, h("div", { class: "fv-zs" }, [zo, zf, zi]), fvGoBtn(o.go), xb]), fb, body,
     h("div", { class: "fv-f" }, ["🔒 內部資料：只能看，不能下載、不能列印"])]);
   var box = h("div", { class: "fv", role: "dialog", "aria-modal": "true", "aria-label": "看檔案：" + label }, [inner]);
   box.addEventListener("click", function (e) { if (e.target === box) fvClose(); });
   box.addEventListener("contextmenu", function (e) { e.preventDefault(); });
   box.addEventListener("dragstart", function (e) { e.preventDefault(); });
-  body.addEventListener("wheel", function (e) { if (e.ctrlKey || e.metaKey) { e.preventDefault(); var f = Math.exp(-Math.max(-120, Math.min(120, e.deltaY)) * 0.0024); if (FV.img && FV.all) fvScaleAt(FV.scale * f, e.clientX, e.clientY); else fvZoom(e.deltaY < 0 ? 1.15 : 1 / 1.15); } }, { passive: false });
+  fvBodyEv(body);
   xb.onclick = function () { fvClose(); };
   zo.onclick = function () { fvZoom(0.8); }; zi.onclick = function () { fvZoom(1.25); }; zf.onclick = function () { FV.fit = true; fvFit(); };
   document.body.appendChild(box);
-  FV.el = box; FV.zs = [zo, zf, zi]; FV.pg = pg; FV.body = body; FV.fb = fb; FV.tb = tb; FV.nv = [nvP, nvN]; FV.title = title;
+  FV.el = box; FV.zs = [zo, zf, zi]; FV.pg = pg; FV.body = body; FV.fb = fb; FV.tb = tb; FV.nv = [nvP, nvN]; FV.title = title; FV.bkb = bkb; FV.ic = ic;
   FV.two = !!o.two; FV.rots = o.rots && typeof o.rots === "object" ? o.rots : null;
-  ["wheel", "touchstart", "pointerdown", "keydown"].forEach(function (ev) { body.addEventListener(ev, function () { FV.lock = false; }, { passive: true }); });
   document.addEventListener("keydown", fvKey, true);
   fvHistIn();
   try { xb.focus({ preventScroll: true }); } catch (e) {  }
   if (o.src) { fvSrc(String(o.src), my, o); return; }
-  var t0 = Date.now(), got = 0;
+  if (o.kind === "folder" || o.sub) FV.fold = { r: o.foldPre || null, o: o, top: 0 };
+  if (o.sub) { FV.sub = String(o.sub); bkb.hidden = false; title.textContent = fdLeaf(o.subName) || label; }
+  fvGet(o, FV.sub, my);
+}
+function fvBodyEv(body) {
+  body.addEventListener("wheel", function (e) { if (e.ctrlKey || e.metaKey) { e.preventDefault(); var f = Math.exp(-Math.max(-120, Math.min(120, e.deltaY)) * 0.0024); if (FV.img && FV.all) fvScaleAt(FV.scale * f, e.clientX, e.clientY); else fvZoom(e.deltaY < 0 ? 1.15 : 1 / 1.15); } }, { passive: false });
+  ["wheel", "touchstart", "pointerdown", "keydown"].forEach(function (ev) { body.addEventListener(ev, function () { FV.lock = false; }, { passive: true }); });
+}
+function fvGet(o, sub, my) {
+  var label = String(o.label || "檔案"), t0 = Date.now(), got = 0;
   var say = function () {
-    var m = $("#fvmsg", box); if (!m || my !== FV.seq) return;
+    var m = $("#fvmsg", FV.el); if (!m || my !== FV.seq) return;
     var s = Math.round((Date.now() - t0) / 1000);
-    m.textContent = got > 0 ? "下載中…" + (got > 1048576 ? (got / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(got / 1024)) + " KB") : "拿檔案中…" + (s >= 2 ? s + " 秒" : "") + (s >= 4 ? "（Word、Excel、PPT 第一次打開要轉成 PDF，大約 5～30 秒）" : "");
+    m.textContent = got > 0 ? "下載中…" + (got > 1048576 ? (got / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(got / 1024)) + " KB") : (sub || o.kind !== "folder" ? "拿檔案中…" : "拿資料夾裡的檔的清單…") + (s >= 2 ? s + " 秒" : "") + (s >= 4 ? "（Word、Excel、PPT 第一次打開要轉成 PDF，大約 5～30 秒）" : "");
   };
   var tick = setInterval(function () { if (my !== FV.seq) { clearInterval(tick); return; } say(); }, 1000);
   var prog = function (ph, g) { if (ph === "dl") { got = g || 0; say(); } };
-  var req = o.pre ? Promise.resolve({ ok: 1, kind: o.pre.kind, mime: o.pre.mime, bytes: o.pre.bytes, name: o.pre.name, label: label }) : o.try ? call("hbFileTry", [o.try], { ms: 150000, prog: prog }) : call("hbFile", [o.tid, o.bi, o.ii, o.tag || ""], { ms: 150000, prog: prog });
+  var pre = o.pre && (sub || "") === String(o.sub || "") ? o.pre : null;
+  var req = pre ? Promise.resolve({ ok: 1, kind: pre.kind, mime: pre.mime, bytes: pre.bytes, name: pre.name, label: label }) :
+    !sub && o.foldPre ? Promise.resolve(o.foldPre) :
+    o.try ? call("hbFileTry", sub ? [o.try, sub] : [o.try], { ms: 150000, prog: prog }) : call("hbFile", sub ? [o.tid, o.bi, o.ii, o.tag || "", sub] : [o.tid, o.bi, o.ii, o.tag || ""], { ms: 150000, prog: prog });
   req.then(function (r) {
     clearInterval(tick);
     if (my !== FV.seq) return;
     if (r && r.st && !r.err) { fvClose(); if (r.st === "lock") logout("expired"); return; }
     if (!r || !r.ok) {
-      var fb = r && /^(html|login|net|http)$/.test(String(r.code || "")) ? _yzLinkFix_(o.try || o.u) : "";
+      var fb = !sub && r && /^(html|login|net|http)$/.test(String(r.code || "")) ? _yzLinkFix_(o.try || o.u) : "";
       if (fb) { wvOpen({ u: fb, try: o.try ? fb : "", label: label, tid: o.tid, bi: o.bi, ii: o.ii, tag: o.tag, info: r.code === "net" ? null : r.wv ? { xfo: String(r.wv.xfo || ""), fa: Array.isArray(r.wv.fa) ? r.wv.fa : [], login: r.wv.login ? 1 : 0 } : undefined, keep: true, auto: !!o.auto, gest: o.gest, note: IS_DEV && r.err ? "ℹ️（開發者才看得到）當成檔案拿不到，改用網頁的方式打開。後端說：" + String(r.err).slice(0, 200) : "" }); return; }
       fvErr(r && r.err || "沒拿到檔案"); return;
     }
-    if (r.label || r.name) { title.textContent = r.label || r.name; box.setAttribute("aria-label", "看檔案：" + title.textContent); }
-    if (r.kind === "img") { fvImg(r, my); if (FV.fb) { FV.done = true; FV.hits = []; FV.fimg = true; fvFindPaint(); } } else fvPdf(r, my);
+    if (r.folder) { fvFold(r, o, my); return; }
+    var nm = sub ? fdLeaf(r.name) || fdLeaf(o.subName) || label : r.label || r.name;
+    if (nm) { FV.title.textContent = nm; FV.el.setAttribute("aria-label", "看檔案：" + nm); }
+    if (sub && FV.ic) FV.ic.textContent = fvIco(r.kind === "img" ? "img" : _yzCloudExt_(r.name) || "pdf");
+    if (r.kind === "img") { fvImg(r, my); if (FV.fb && FV.hl) { FV.done = true; FV.hits = []; FV.fimg = true; fvFindPaint(); } } else fvPdf(r, my);
   }, function (e) { clearInterval(tick); if (my === FV.seq) fvErr(e && e.code === "bad" ? "藥戰手冊的後端還不認得「在手冊裡看檔案」（Apps Script 要貼第 43 批的 01、02、03，部署新版本）" : e && e.message || "連不上後端"); });
+}
+
+function fdLeaf(n) { return String(n || "").split("／").pop().trim(); }
+function fdSize(z) { z = +z || 0; return z <= 0 ? "" : z < 1024 ? z + " B" : z < 1048576 ? Math.max(1, Math.round(z / 1024)) + " KB" : (z / 1048576).toFixed(1) + " MB"; }
+function fdItem(it, fn) {
+  var path = String(it.n || ""), parts = path.split("／"), leaf = parts.pop() || path, dir = parts.join(" › "), big = +it.z > 15 * 1048576, sz = fdSize(it.z);
+  return h("button", { class: "fd-it", type: "button", title: path, disabled: big ? true : null, "aria-label": (YZ_FILE_NAME[it.k] || "檔案") + "：" + path + (big ? "（太大，看不了）" : ""), onclick: function (e) { e.preventDefault(); e.stopPropagation(); fn(it); } }, [
+    h("span", { class: "fd-i", "aria-hidden": "true" }, [YZ_FILE_ICO[it.k] || "📄"]),
+    h("span", { class: "fd-b" }, [h("b", { class: "fd-n" }, [leaf]), dir ? h("small", { class: "fd-d" }, ["📁 " + dir]) : null]),
+    h("span", { class: "fd-z" }, [big ? "太大（上限 15 MB）" : (YZ_FILE_NAME[it.k] || "檔案") + (sz ? "・" + sz : "")]),
+    h("span", { class: "fd-o", "aria-hidden": "true" }, ["›"])
+  ]);
+}
+function fdList(r, fn, cls) {
+  var items = Array.isArray(r.items) ? r.items : [], kids = [], notes = [];
+  kids.push(h("div", { class: "fd-h" }, [h("b", { class: "fd-hn" }, ["📁 " + (String(r.name || "").trim() || "資料夾")]), h("small", {}, [(r.via ? r.via + "・" : "") + items.length + " 個檔"])]));
+  if (!items.length) kids.push(h("p", { class: "fd-none" }, ["這個資料夾裡沒有手冊看得了的檔（Word、Excel、PPT、PDF、圖片）"]));
+  else kids.push(h("div", { class: "fd-l" }, items.map(function (it) { return fdItem(it, fn); })));
+  if (+r.other > 0) notes.push("另外 " + r.other + " 個檔是手冊看不了的種類（影片、壓縮檔…），沒有列出來");
+  if (r.more) notes.push("資料夾很大：最多列出 200 個檔、往下 3 層子資料夾");
+  if (notes.length) kids.push(h("p", { class: "fd-note" }, [notes.join("；") + "。"]));
+  if (items.length) kids.push(h("p", { class: "fd-tip" }, ["點一個檔就在這裡看（只能看）；看完按上面「‹ 資料夾」回來。"]));
+  return h("div", { class: "fd" + (cls ? " " + cls : "") }, kids);
+}
+function fvSwap() {
+  FV.seq++;
+  if (FV.io) { try { FV.io.disconnect(); } catch (e) {  } FV.io = null; }
+  if (FV.task) { try { FV.task.destroy(); } catch (e) {  } FV.task = null; }
+  if (FV.doc) { try { FV.doc.destroy(); } catch (e) {  } FV.doc = null; }
+  if (FV.url) { try { URL.revokeObjectURL(FV.url); } catch (e) {  } FV.url = ""; }
+  FV.pages = []; FV.img = null; FV.ims = null; FV.k = 0; FV.gap = 0; FV.w1 = 0; FV.h1 = 0; FV.n = 0; FV.cur = 0; FV.all = false; FV.s0 = 0; FV.zoom = 1; FV.rots = null;
+  FV.goto = 0; FV.hl = null; FV.hits = null; FV.hm = null; FV.hi = -1; FV.lock = false; FV.jumped = false; FV.noTxt = null; FV.done = false; FV.fimg = false;
+  if (FV.fb) FV.fb.hidden = true;
+  var nb = h("div", { class: "fv-b", tabindex: "0", "aria-label": "檔案內容" }, [h("div", { class: "fv-m" }, [h("div", { class: "fv-sp", "aria-hidden": "true" }), h("p", { id: "fvmsg" }, ["拿檔案中…"])])]);
+  if (FV.body && FV.body.parentNode) FV.body.parentNode.replaceChild(nb, FV.body);
+  FV.body = nb; fvBodyEv(nb);
+  fvZoomOk(false);
+  if (FV.tb) FV.tb.hidden = true;
+  (FV.nv || []).forEach(function (b) { b.hidden = true; });
+  FV.pg.textContent = "";
+  return FV.seq;
+}
+function fvFold(r, o, my) {
+  var F = FV.fold && FV.fold.o === o ? FV.fold : (FV.fold = { r: null, o: o, top: 0 });
+  F.r = r; FV.sub = "";
+  if (FV.bkb) FV.bkb.hidden = true;
+  if (FV.fb) FV.fb.hidden = true;
+  if (FV.ic) FV.ic.textContent = "📁";
+  FV.title.textContent = String(o.label || r.label || r.name || "資料夾"); FV.el.setAttribute("aria-label", "看資料夾：" + FV.title.textContent);
+  fvZoomOk(false); if (FV.tb) FV.tb.hidden = true;
+  FV.body.classList.remove("fv-pic", "two");
+  FV.body.innerHTML = "";
+  FV.body.appendChild(fdList(r, function (it) { fvSubOpen(it); }, "fv-fd"));
+  FV.pg.textContent = "📁 資料夾・" + (r.items || []).length + " 個檔";
+  FV.body.scrollTop = F.top || 0;
+}
+function fvSubOpen(it) {
+  var F = FV.fold; if (!F || !FV.el) return;
+  F.top = FV.body.scrollTop;
+  var my = fvSwap();
+  FV.sub = String(it.s);
+  if (FV.bkb) FV.bkb.hidden = false;
+  if (FV.ic) FV.ic.textContent = fvIco(it.k);
+  FV.title.textContent = fdLeaf(it.n) || "檔案"; FV.el.setAttribute("aria-label", "看檔案：" + FV.title.textContent);
+  try { FV.bkb.focus({ preventScroll: true }); } catch (e) {  }
+  fvGet(F.o, FV.sub, my);
+}
+function fvFoldBack() {
+  var F = FV.fold; if (!F || !FV.el) return;
+  var my = fvSwap();
+  FV.sub = "";
+  if (FV.bkb) FV.bkb.hidden = true;
+  if (FV.ic) FV.ic.textContent = "📁";
+  FV.title.textContent = String(F.o.label || "資料夾");
+  if (F.r) { fvFold(F.r, F.o, my); return; }
+  var m = $("#fvmsg", FV.el); if (m) m.textContent = "拿資料夾裡的檔的清單…";
+  fvGet(F.o, "", my);
 }
 function fvErr(t) {
   if (!FV.body) return;
@@ -5958,16 +6328,22 @@ function wvForce(my) {
   wvFrame(my); wvShow(my);
 }
 
-var XE = { all: [], cache: {}, ck: [], fly: {}, err: {}, asweb: {}, io: null, ro: null, q: [], run: 0, gc: 0 };
+var XE = { all: [], cache: {}, ck: [], fly: {}, err: {}, asweb: {}, io: null, ro: null, q: [], run: 0, gc: 0, fold: {} };
 var XE_CACHE_MAX = 48 * 1048576, XE_CACHE_N = 10, XE_RUN = 2, XE_KEEP = 30000;
 var XE_ZMAX = 4;
 function xeIco(fk) { return fk ? (YZ_FILE_ICO[fk] || "📄") : "🌐"; }
-function xeSub(E) { return (E.fk ? YZ_FILE_NAME[E.fk] + "｜只能看" : _yzLinkHost_(E.u)) + (E.n ? "｜" + E.n : ""); }
+function xeSub(E) {
+  if (E.sub) return "📁 資料夾 › " + (E.sn || "檔案") + "｜只能看" + (E.n ? "｜" + E.n : "");
+  if (E.st === "fold") return "資料夾｜點一個檔就在這裡看" + (E.n ? "｜" + E.n : "");
+  return (E.fk ? YZ_FILE_NAME[E.fk] + "｜只能看" : _yzLinkHost_(E.u)) + (E.n ? "｜" + E.n : "");
+}
+function xeKey(E) { return E.sub ? E.u + "\n" + E.sub : E.u; }
 function xeHead(E) {
   E.tt.innerHTML = "";
   E.tt.appendChild(h("b", {}, hlNodes(E.lab, E.hl)));
   E.tt.appendChild(h("small", {}, hlNodes(xeSub(E), E.hl)));
-  E.ic.textContent = xeIco(E.fk);
+  E.ic.textContent = xeIco(E.sub ? E.sk || "file" : E.st === "fold" ? "folder" : E.fk);
+  if (E.bk) E.bk.hidden = !E.sub;
   E.el.setAttribute("data-k", E.fk || "web");
   E.el.classList.toggle("xe-file", !!E.fk);
   E.el.classList.toggle("xe-web", !E.fk);
@@ -6017,10 +6393,11 @@ function xeBox(x, i, ctx, hl) {
   E.zp = h("span", { class: "xe-zp", "aria-live": "polite", title: "100%＝照寬度放滿" }, ["100%"]);
   E.zs = h("span", { class: "xe-zs", role: "group", "aria-label": "放大縮小", hidden: true }, [E.zo, E.zp, E.zi, E.zf]);
   E.ob = h("a", { class: "xe-o", href: u || "#", target: "_blank", rel: "noopener noreferrer", referrerpolicy: "no-referrer", title: "另外打開（離開手冊的畫面；看完關掉就回來）", onclick: function (e) { e.stopPropagation(); if (!u || xlOpen(u)) e.preventDefault(); } }, ["↗", h("span", {}, ["另外打開"])]);
+  E.bk = h("button", { class: "xe-bk", type: "button", hidden: true, title: "回到資料夾裡的檔的清單", onclick: function (e) { e.preventDefault(); e.stopPropagation(); xeFdBack(E); } }, ["‹", h("span", {}, [" 資料夾"])]);
   E.idle = h("div", { class: "fv-idle xe-idle", role: "status", hidden: true }, [""]);
   E.body = h("div", { class: "xe-b", tabindex: "0", role: "region" });
   E.ft = h("div", { class: "xe-f" }, [""]);
-  E.el = h("div", { class: "xemb" }, [h("div", { class: "xe-h" }, [E.ic, E.tt, E.pg, E.zs, E.tb, big, E.ob]), E.idle, E.body, E.ft]);
+  E.el = h("div", { class: "xemb" }, [h("div", { class: "xe-h" }, [E.bk, E.ic, E.tt, E.pg, E.zs, E.tb, big, E.ob]), E.idle, E.body, E.ft]);
   E.el._xe = E;
   xeSize(E, x);
   E.el.addEventListener("contextmenu", function (e) { e.preventDefault(); });
@@ -6030,7 +6407,7 @@ function xeBox(x, i, ctx, hl) {
   if (!u) { E.st = "bad"; xeMsg(E, "網址不合格，打不開。"); return E.el; }
   if (mode === "ph") {
     E.st = "ph";
-    E.body.appendChild(h("div", { class: "xe-m xe-ph" }, [h("div", { class: "xe-phi", "aria-hidden": "true" }, [xeIco(fk)]), h("p", {}, ["嵌入：藥師看的時候，這一格就是" + (fk ? "這個 " + YZ_FILE_NAME[fk] + " 的內容" + (E.two ? "（一打開兩頁並排）" : "") : "這個網頁") + "（翻頁預覽不拿）"])]));
+    E.body.appendChild(h("div", { class: "xe-m xe-ph" }, [h("div", { class: "xe-phi", "aria-hidden": "true" }, [xeIco(fk)]), h("p", {}, ["嵌入：藥師看的時候，這一格就是" + (fk === "folder" ? "這個資料夾裡的檔（清單，點了在這一格看）" : fk ? "這個 " + YZ_FILE_NAME[fk] + " 的內容" + (E.two ? "（一打開兩頁並排）" : "") : "這個網頁") + "（翻頁預覽不拿）"])]));
     return E.el;
   }
   xeZoomEv(E);
@@ -6097,40 +6474,45 @@ function xeErr(E, t) {
   (E.tm || []).forEach(function (x) { clearTimeout(x); }); E.tm = [];
   if (E.fr) { try { E.fr.remove(); } catch (e) {  } E.fr = null; }
   E.body.innerHTML = "";
-  E.body.appendChild(h("div", { class: "xe-m err" }, [h("p", { class: "fv-e" }, ["❌ " + String(t).slice(0, 300)]), h("button", { class: "btn sm xe-again", type: "button", onclick: function (e) { e.stopPropagation(); delete XE.err[E.u]; E.st = "idle"; E.body.innerHTML = ""; xeMsg(E, "拿檔案中…", true); xeWant(E); } }, ["↻ 再試一次"])]));
+  E.body.appendChild(h("div", { class: "xe-m err" }, [h("p", { class: "fv-e" }, ["❌ " + String(t).slice(0, 300)]), h("button", { class: "btn sm xe-again", type: "button", onclick: function (e) { e.stopPropagation(); delete XE.err[xeKey(E)]; E.st = "idle"; E.body.innerHTML = ""; xeMsg(E, "拿檔案中…", true); xeWant(E); } }, ["↻ 再試一次"])]));
 }
 function xeFile(E) {
-  var my = ++E.seq, c = xeGet(E.u);
+  var my = ++E.seq, sub = E.sub || "", key = xeKey(E), c = xeGet(key);
   if (c) { xeGot(E, c, my); return Promise.resolve(); }
-  var er = XE.err[E.u];
+  var fd = sub ? null : XE.fold[E.u];
+  if (fd && Date.now() - fd.t < 6e5) { xeFold(E, fd.r); return Promise.resolve(); }
+  var er = XE.err[key];
   if (er && Date.now() - er.t < 60000) { xeErr(E, er.m); return Promise.resolve(); }
   E.st = "load";
   var t0 = Date.now(), got = 0;
   var say = function () {
     if (my !== E.seq || E.st !== "load") return;
     var s = Math.round((Date.now() - t0) / 1000);
-    xeMsg(E, got > 0 ? "下載中…" + (got > 1048576 ? (got / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(got / 1024)) + " KB") : "拿檔案中…" + (s >= 2 ? s + " 秒" : "") + (s >= 4 ? "（Word、Excel、PPT 第一次打開要轉成 PDF，大約 5～30 秒）" : ""), true);
+    xeMsg(E, got > 0 ? "下載中…" + (got > 1048576 ? (got / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(got / 1024)) + " KB") : (!sub && E.fk === "folder" ? "拿資料夾裡的檔的清單…" : "拿檔案中…") + (s >= 2 ? s + " 秒" : "") + (s >= 4 ? "（Word、Excel、PPT 第一次打開要轉成 PDF，大約 5～30 秒）" : ""), true);
   };
   say();
   var tick = setInterval(function () { if (my !== E.seq || E.st !== "load") { clearInterval(tick); return; } say(); }, 1000);
-  var f = XE.fly[E.u];
+  var f = XE.fly[key];
   if (!f) {
     var prog = function (ph, g) { if (ph === "dl") { got = g || 0; say(); } };
-    var req = E.mode === "pv" || !E.ctx.tid ? call("hbFileTry", [E.u], { ms: 150000, prog: prog }) : call("hbFile", [E.ctx.tid, E.ctx.bi, E.i, E.tag], { ms: 150000, prog: prog });
-    f = XE.fly[E.u] = req.then(function (r) {
-      delete XE.fly[E.u];
-      if (r && r.ok && r.b64) { var c2 = { kind: r.kind === "img" ? "img" : "pdf", mime: String(r.mime || ""), bytes: fvB64(r.b64), name: String(r.name || "") }; r.b64 = null; xePut(E.u, c2); return { c: c2 }; }
+    var req = E.mode === "pv" || !E.ctx.tid ? call("hbFileTry", sub ? [E.u, sub] : [E.u], { ms: 150000, prog: prog }) : call("hbFile", sub ? [E.ctx.tid, E.ctx.bi, E.i, E.tag, sub] : [E.ctx.tid, E.ctx.bi, E.i, E.tag], { ms: 150000, prog: prog });
+    var u0 = E.u;
+    f = XE.fly[key] = req.then(function (r) {
+      delete XE.fly[key];
+      if (r && r.ok && r.b64) { var c2 = { kind: r.kind === "img" ? "img" : "pdf", mime: String(r.mime || ""), bytes: fvB64(r.b64), name: String(r.name || "") }; r.b64 = null; xePut(key, c2); return { c: c2 }; }
+      if (r && r.ok && r.folder && !sub) { XE.fold[u0] = { r: r, t: Date.now() }; return { fd: r }; }
       return { r: r };
-    }, function (e) { delete XE.fly[E.u]; return { e: e }; });
+    }, function (e) { delete XE.fly[key]; return { e: e }; });
   }
   return f.then(function (o) {
     clearInterval(tick);
     if (my !== E.seq) return;
     if (o.c) { xeGot(E, o.c, my); return; }
+    if (o.fd) { xeFold(E, o.fd); return; }
     if (o.e) { xeErr(E, o.e && o.e.code === "bad" ? "藥戰手冊的後端還不認得「在手冊裡看檔案」（Apps Script 要換新的，部署新版本）" : o.e && o.e.message || "連不上後端"); return; }
     var r = o.r;
     if (r && r.st && !r.err) { E.st = "idle"; xeMsg(E, "登入過期了：重新登入以後再看"); if (r.st === "lock") logout("expired"); return; }
-    if (r && /^(html|login|net|http)$/.test(String(r.code || ""))) {
+    if (!sub && r && /^(html|login|net|http)$/.test(String(r.code || ""))) {
       var pre = r.code === "net" ? null : r.wv ? { xfo: String(r.wv.xfo || ""), fa: Array.isArray(r.wv.fa) ? r.wv.fa : [], login: r.wv.login ? 1 : 0 } : undefined;
       XE.asweb[E.u] = { i: pre };
       E.fk = ""; E.pre = pre; xeHead(E);
@@ -6138,9 +6520,50 @@ function xeFile(E) {
       return;
     }
     var msg = r && r.err || "沒拿到檔案";
-    if (!(r && r.code === "busy")) XE.err[E.u] = { t: Date.now(), m: msg };
+    if (!(r && r.code === "busy")) XE.err[key] = { t: Date.now(), m: msg };
     xeErr(E, msg);
   });
+}
+function xeFold(E, r) {
+  E.st = "fold"; E.sub = ""; E.sn = ""; E.sk = "";
+  xeHead(E);
+  E.body.innerHTML = "";
+  E.body.appendChild(fdList(r, function (it) { xeFdOpen(E, it); }, "xe-fd"));
+  E.pg.textContent = (r.items || []).length + " 個檔";
+  E.body.scrollTop = E.fdTop || 0;
+}
+function xeClear(E) {
+  E.seq++;
+  if (E.pio) { try { E.pio.disconnect(); } catch (e) {  } E.pio = null; }
+  E.pages.forEach(function (p) { if (p.task) { try { p.task.cancel(); } catch (e) {  } } p.cv.width = 0; p.cv.height = 0; });
+  E.pages = [];
+  if (E.task) { try { E.task.destroy(); } catch (e) {  } E.task = null; }
+  if (E.doc) { try { E.doc.destroy(); } catch (e) {  } E.doc = null; }
+  if (E.url) { try { URL.revokeObjectURL(E.url); } catch (e) {  } E.url = ""; }
+  E.img = null; E.ibox = null; E.rcv = null; E.irot = 0; E.n = 0; E.cur = 0; E.sc = 0; E.w1 = 0; E.h1 = 0; E.iw0 = 0; E.pan = null; E.pinch = null;
+  E.z = 1; E.body.style.height = ""; xeZoomPaint(E);
+  E.el.classList.remove("fit", "xe-2", "zoomed");
+  if (E.zs) E.zs.hidden = true;
+  if (E.tb) E.tb.hidden = true;
+  E.pg.textContent = "";
+  E.body.innerHTML = ""; E.body.scrollTop = 0; E.body.scrollLeft = 0;
+}
+function xeFdOpen(E, it) {
+  E.fdTop = E.body.scrollTop;
+  xeClear(E);
+  E.sub = String(it.s); E.sn = fdLeaf(it.n) || "檔案"; E.sk = it.k || "file"; E.st = "idle";
+  xeHead(E);
+  xeMsg(E, "拿檔案中…", true);
+  xeWant(E);
+}
+function xeFdBack(E) {
+  xeClear(E);
+  E.sub = ""; E.sn = ""; E.sk = ""; E.st = "idle";
+  var fd = XE.fold[E.u];
+  if (fd) { xeFold(E, fd.r); return; }
+  xeHead(E);
+  xeMsg(E, "拿資料夾裡的檔的清單…", true);
+  xeWant(E);
 }
 function xeGot(E, c, my) {
   E.st = "file";
@@ -6488,6 +6911,13 @@ function xeForce(E) {
 }
 function xeBig(E) {
   if (!E.u) return;
+  if (E.fk && (E.fk === "folder" || E.sub || E.st === "fold")) {
+    var fd = XE.fold[E.u], o0 = { label: E.lab, kind: "folder", two: !!E.two, foldPre: fd ? fd.r : null };
+    if (E.sub) { o0.sub = E.sub; o0.subName = E.sn; o0.subKind = E.sk; var cs = xeGet(xeKey(E)); if (cs) o0.pre = cs; }
+    if (E.mode === "pv" || !E.ctx.tid) o0.try = E.u; else { o0.tid = E.ctx.tid; o0.bi = E.ctx.bi; o0.ii = E.i; o0.tag = E.tag; o0.u = E.u; }
+    fvOpen(o0);
+    return;
+  }
   if (E.fk) {
     var c = xeGet(E.u), rots = {}, any = false;
     E.pages.forEach(function (p) { if (p.rot) { rots[p.n] = p.rot; any = true; } });
@@ -6506,7 +6936,7 @@ function xeBig(E) {
 function xeReuse(key) {
   var hit = null;
   XE.all.some(function (E) {
-    if (E.key !== key || E.claimed || E.el.isConnected || !/^(idle|wait|load|file)$/.test(E.st)) return false;
+    if (E.key !== key || E.claimed || E.el.isConnected || !/^(idle|wait|load|file|fold)$/.test(E.st)) return false;
     hit = E; return true;
   });
   if (hit) { xeClaim(hit); hit.off = 0; }
@@ -6539,7 +6969,7 @@ function xeKill(E) {
 }
 function xeDrop() {
   XE.all.forEach(xeKill);
-  XE.all = []; XE.cache = {}; XE.ck = []; XE.fly = {}; XE.err = {}; XE.asweb = {}; XE.q = []; XE.run = 0;
+  XE.all = []; XE.cache = {}; XE.ck = []; XE.fly = {}; XE.err = {}; XE.asweb = {}; XE.q = []; XE.run = 0; XE.fold = {};
   if (XE.gc) { clearInterval(XE.gc); XE.gc = 0; }
 }
 function xeEager(lo, hi) {
@@ -6827,8 +7257,10 @@ function mdOpenDoc(d, toks) {
   if (!f) { toast("找不到這份文件（可能剛改過）：重新整理再試試"); return; }
   var x = f.x, u = _yzLinkFix_(x.u), lab = _yzLinkLabel_(x), tag = _yzLinkTag_(u), fk = _yzLinkFileKind_(x), go = { tid: f.t.id, b: f.b, ii: f.ii, hl: toks };
   if (!fk) { if (xvExt(x)) { xvOpenNow(u); return; } wvOpen({ u: u, label: lab, tid: f.t.id, bi: f.b, ii: f.ii, tag: tag, auto: !x.k, gest: Date.now(), go: go }); return; }
-  fvOpen({ tid: f.t.id, bi: f.b, ii: f.ii, tag: tag, label: lab, kind: fk, u: u, auto: !x.k, gest: Date.now(), page: +d.pg || 0, hl: toks && toks.length ? toks : null, go: go, two: x.two === true });
+  var fs = d.fs !== undefined && d.fs !== null && d.fs !== "" ? String(d.fs) : "";
+  fvOpen({ tid: f.t.id, bi: f.b, ii: f.ii, tag: tag, label: lab, kind: fs ? "folder" : fk, u: u, auto: !x.k, gest: Date.now(), page: fs ? +d.fpg || 0 : +d.pg || 0, hl: toks && toks.length ? toks : null, go: go, two: x.two === true, sub: fs, subName: fs ? d.fn : "" });
 }
+function mdFoldNote(d) { return d && d.fn !== undefined && d.fn !== null && d.fs !== undefined ? "資料夾裡的「" + fdLeaf(d.fn) + "」" + (d.fpg ? "第 " + d.fpg + " 頁" : "") : ""; }
 function mdBlockEl(b, ii) {
   var root = $("#pane-view"); if (!root) return null;
   var els = $$(".art [data-b='" + b + "']", root).filter(function (el) { return !el.closest(".bk-ghost, .rbk-clone, [aria-hidden='true']"); });
@@ -6890,7 +7322,7 @@ function dxFind(q, cb) {
 function dxDocHit(d) {
   var f = mdItem(d.tid, d.b, d.ii, d.key);
   if (!f) return null;
-  return { ch: chapterOf(f.t.ch), t: f.t, b: f.b, ii: f.ii, kind: d.kind, key: d.key, label: d.label || _yzLinkLabel_(f.x), pg: +d.pg || 0, where: d.where, snip: d.snip, segs: d.segs, score: +d.score || 0, srv: 1 };
+  return { ch: chapterOf(f.t.ch), t: f.t, b: f.b, ii: f.ii, kind: d.kind, key: d.key, label: d.label || _yzLinkLabel_(f.x), pg: +d.pg || 0, where: d.where, snip: d.snip, segs: d.segs, score: +d.score || 0, srv: 1, fs: d.fs, fn: d.fn, fpg: +d.fpg || 0 };
 }
 
 function srDraw(col) {
@@ -6960,7 +7392,7 @@ function srAll(body, r, m, S, toks, goTab) {
     ]));
     if (S.docs.length) pv.appendChild(h("div", { class: "srpv" }, [
       h("div", { class: "srpv-h" }, [h("b", {}, ["📄 文件 " + S.docs.length + " 份"]), h("button", { class: "btn sm", type: "button", onclick: function () { goTab("doc"); } }, ["看全部 ›"])]),
-      h("div", { class: "srpv-docs" }, S.docs.slice(0, 3).map(function (d) { return h("button", { class: "srpv-d", type: "button", onclick: function () { mdOpenDoc(d, toks); } }, [h("span", { class: "srpv-i", "aria-hidden": "true" }, [mdKindIco(d.kind)]), h("span", { class: "srpv-t" }, hlNodes(d.label, toks)), d.pg ? h("span", { class: "srpv-pg" }, ["第 " + d.pg + " 頁"]) : null]); }))
+      h("div", { class: "srpv-docs" }, S.docs.slice(0, 3).map(function (d) { var fdn = mdFoldNote(d); return h("button", { class: "srpv-d", type: "button", onclick: function () { mdOpenDoc(d, toks); } }, [h("span", { class: "srpv-i", "aria-hidden": "true" }, [mdKindIco(d.kind)]), h("span", { class: "srpv-t" }, hlNodes(d.label, toks)), fdn ? h("span", { class: "srpv-pg" }, [fdn]) : d.pg ? h("span", { class: "srpv-pg" }, ["第 " + d.pg + " 頁"]) : null]); }))
     ]));
     body.appendChild(pv);
   }
@@ -6968,12 +7400,12 @@ function srAll(body, r, m, S, toks, goTab) {
   if (!r.hits.length && !S.extra.length) srNone(body, r.page ? "手冊裡沒有對應這一頁的標題" : "手冊裡沒有「" + WV.q + "」", r.page ? "標題有填「藥戰手冊頁數」才找得到。" : "這裡只查手冊，不查藥。" + (S.st === "wait" ? "（文件裡的字還在找）" : ""));
   r.hits.forEach(function (hit) { body.appendChild(srTitleCard(hit, r.toks)); });
   S.extra.forEach(function (d) {
-    var pg = _yzPageText_(d.t.page), label = (d.kind === "web" ? "🌐 嵌入的網頁裡的字" : "📄 文件裡的字") + "有符合" + (d.pg && d.kind !== "web" ? "（第 " + d.pg + " 頁）" : "");
+    var fdn = mdFoldNote(d), pg = _yzPageText_(d.t.page), label = (d.kind === "web" ? "🌐 嵌入的網頁裡的字" : "📄 文件裡的字") + "有符合" + (fdn ? "（" + fdn + "）" : d.pg && d.kind !== "web" ? "（第 " + d.pg + " 頁）" : "");
     body.appendChild(pgCard([
       h("div", { class: "pc-meta" }, [h("span", { class: "pc-ch" }, [chIco(d.ch) + " " + [d.ch.name].concat(_yzTPath_(titlesOf(d.ch.id), d.t).map(function (x) { return x.name; })).join(" › ")]), pg ? h("span", { class: "pc-pg" }, ["📖 " + pg]) : null, h("span", {}, [label])]),
       h("h2", { class: "pc-t" }, [d.t.name]),
       h("div", { class: "pc-note" }, [mdKindIco(d.kind) + " " + d.label + "：", (d.segs || []).length ? h("span", {}, d.segs.map(function (g) { return g.h ? h("mark", {}, [g.t]) : g.t; })) : d.snip || ""]),
-      h("div", { class: "sr-acts" }, [h("button", { class: "btn sm md-open", type: "button", onclick: function (e) { e.stopPropagation(); mdOpenDoc(d, toks); } }, [d.kind === "web" ? "🌐 打開這個網頁" : "📄 打開這份文件" + (d.pg ? "（第 " + d.pg + " 頁）" : "")])])
+      h("div", { class: "sr-acts" }, [h("button", { class: "btn sm md-open", type: "button", onclick: function (e) { e.stopPropagation(); mdOpenDoc(d, toks); } }, [d.kind === "web" ? "🌐 打開這個網頁" : fdn ? "📁 打開" + fdn : "📄 打開這份文件" + (d.pg ? "（第 " + d.pg + " 頁）" : "")])])
     ], { go: function () { openTitle(d.t.id, toks); }, label: "打開「" + d.t.name + "」" }));
   });
   if (S.st === "err") body.appendChild(h("p", { class: "srerr" }, ["⚠ 文件裡的字現在找不到（" + S.err + "）：等一下再搜尋一次。"]));
@@ -7010,14 +7442,14 @@ function srDocs(body, S, toks) {
   if (S.st === "err") body.appendChild(h("p", { class: "srerr" }, ["⚠ 文件裡的字現在找不到（" + S.err + "）：上面只有名稱、說明有符合的。"]));
 }
 function srDocCard(d, toks) {
-  var w = d.where === "doc" ? (d.kind === "web" ? "網頁裡的字" : "文件裡的字") : d.where === "dnote" ? "說明" : d.where === "dname" ? "" : "";
+  var w = d.where === "doc" ? (d.kind === "web" ? "網頁裡的字" : "文件裡的字") : d.where === "dnote" ? "說明" : d.where === "dname" ? "" : "", fdn = mdFoldNote(d);
   return h("div", { class: "srdc", role: "button", tabindex: "0", "aria-label": "打開文件：" + d.label, onclick: function () { mdOpenDoc(d, toks); }, onkeydown: function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); mdOpenDoc(d, toks); } } }, [
     h("span", { class: "srdc-i", "aria-hidden": "true" }, [mdKindIco(d.kind)]),
     h("div", { class: "srdc-b" }, [
-      h("div", { class: "srdc-h" }, [h("b", { class: "srdc-t" }, hlNodes(d.label, toks)), h("span", { class: "srdc-k" }, [mdKindName(d.kind) + (d.pg && d.kind !== "web" ? "｜第 " + d.pg + " 頁" : "")])]),
+      h("div", { class: "srdc-h" }, [h("b", { class: "srdc-t" }, hlNodes(d.label, toks)), h("span", { class: "srdc-k" }, [mdKindName(d.kind) + (fdn ? "｜" + fdn : d.pg && d.kind !== "web" ? "｜第 " + d.pg + " 頁" : "")])]),
       w && d.snip ? h("div", { class: "srdc-n" }, [w + "：", (d.segs || []).length ? h("span", {}, d.segs.map(function (g) { return g.h ? h("mark", {}, [g.t]) : g.t; })) : d.snip]) : null,
       h("div", { class: "srdc-w" }, ["在：" + mdWhere(d.t)]),
-      h("div", { class: "sr-acts" }, [h("span", { class: "srdc-o" }, [d.kind === "web" ? "🌐 打開這個網頁" : "📄 打開" + (d.pg ? "（第 " + d.pg + " 頁）" : "")]), mdGoBtn({ tid: d.t.id, b: d.b, ii: d.ii, hl: toks })])
+      h("div", { class: "sr-acts" }, [h("span", { class: "srdc-o" }, [d.kind === "web" ? "🌐 打開這個網頁" : fdn ? "📁 打開" + fdn : "📄 打開" + (d.pg ? "（第 " + d.pg + " 頁）" : "")]), mdGoBtn({ tid: d.t.id, b: d.b, ii: d.ii, hl: toks })])
     ])
   ]);
 }
@@ -7085,10 +7517,10 @@ function libDraw(col) {
         ]);
       })));
       if (g.ds.length) sec.appendChild(h("div", { class: "libdocs" }, g.ds.map(function (d) {
-        var hd = hitD[d.t.id + "|" + d.key], pg = hd ? +hd.pg || 0 : 0;
-        return h("button", { class: "libdoc", type: "button", onclick: function () { mdOpenDoc({ tid: d.t.id, b: d.b, ii: d.ii, key: d.key, kind: d.kind, label: d.label, pg: pg }, toks); } }, [
+        var hd = hitD[d.t.id + "|" + d.key], pg = hd ? +hd.pg || 0 : 0, fdn = mdFoldNote(hd);
+        return h("button", { class: "libdoc", type: "button", onclick: function () { mdOpenDoc({ tid: d.t.id, b: d.b, ii: d.ii, key: d.key, kind: d.kind, label: d.label, pg: pg, fs: hd && hd.fs, fn: hd && hd.fn, fpg: hd && hd.fpg }, toks); } }, [
           h("span", { class: "libdoc-i", "aria-hidden": "true" }, [mdKindIco(d.kind)]),
-          h("span", { class: "libdoc-b" }, [h("b", {}, hlNodes(d.label, toks)), h("small", {}, [mdKindName(d.kind) + (pg && d.kind !== "web" ? "｜第 " + pg + " 頁" : "") + "｜" + (d.t.name || "")]),
+          h("span", { class: "libdoc-b" }, [h("b", {}, hlNodes(d.label, toks)), h("small", {}, [mdKindName(d.kind) + (fdn ? "｜" + fdn : pg && d.kind !== "web" ? "｜第 " + pg + " 頁" : "") + "｜" + (d.t.name || "")]),
             hd && hd.where === "doc" ? h("small", { class: "libdoc-n" }, (hd.segs || []).length ? hd.segs.map(function (s) { return s.h ? h("mark", {}, [s.t]) : s.t; }) : [hd.snip || ""]) : null]),
           h("span", { class: "libdoc-o", "aria-hidden": "true" }, ["›"])
         ]);
@@ -7189,6 +7621,7 @@ function dxRun(d, why) {
   return dxCall("hbDocSrc", [d.u], { ms: 150000 }).then(function (r) {
     if (r && r.st === "lock") { logout("expired"); throw dxErr("登入過期了", "lock"); }
     if (!r || !r.ok) { if (r && (r.code === "busy" || r.code === "drv")) throw dxErr(r.err, "busy"); return put({ err: r && r.err || "拿不到這個檔案", code: r && r.code || "" }); }
+    if (r.folder) return dxFold(d, r, put, same);
     var bytes = fvB64(r.b64), kind = r.kind, mime = r.mime, nm = r.name || "";
     r.b64 = null;
     return dxSig(bytes).then(function (sig) {
@@ -7198,6 +7631,35 @@ function dxRun(d, why) {
     });
   });
 }
+var DX_FD_MAX = 40;
+function dxFold(d, r, put, same) {
+  var items = (Array.isArray(r.items) ? r.items : []).slice();
+  return dxSigText(JSON.stringify(items.map(function (it) { return [it.s, it.n, it.z]; }))).then(function (sig) {
+    if (same(sig)) return put({ touch: 1 });
+    var p = [], o = [], f = [], left = YZ_DX_MAX, pgLeft = YZ_DX_PG, ocrLeft = DX_OCR_PG, cut = !!r.more, fe = 0, i = 0, N = Math.min(items.length, DX_FD_MAX);
+    var done = function () { if (i < items.length) cut = true; return put({ p: p, n: p.length, o: o, nm: String(r.name || ""), sig: sig, cut: cut ? 1 : 0, fd: 1, f: f, nf: items.length, fe: fe }); };
+    var step = function () {
+      if (i >= N || left <= 0 || pgLeft <= 0) return done();
+      var it = items[i++], st = { i: i, n: N, nm: fdLeaf(it.n) };
+      dxSt(d.key, { ph: "fold", fi: st.i, fn: st.n, fnm: st.nm });
+      return dxCall("hbDocSrc", [d.u, String(it.s)], { ms: 150000 }).then(function (x) {
+        if (x && x.st === "lock") { logout("expired"); throw dxErr("登入過期了", "lock"); }
+        if (!x || !x.ok || x.folder || !x.b64) { if (x && (x.code === "busy" || x.code === "drv")) throw dxErr(x.err, "busy"); fe++; return null; }
+        var bytes = fvB64(x.b64); x.b64 = null;
+        var job = x.kind === "img" ? dxImgText(d, bytes, x.mime) : dxPdfText(d, bytes, { pg: pgLeft, chars: left, ocr: ocrLeft, st: st });
+        return job.then(function (t) {
+          var start = p.length, cnt = 0, ocr0 = (t.o || []).length;
+          (t.p || []).forEach(function (pg0) { if (pgLeft <= 0 || left <= 0) { cut = true; return; } var s0 = String(pg0 || ""); if (s0.length > left) { s0 = s0.slice(0, left); cut = true; } left -= s0.length; pgLeft--; p.push(s0); cnt++; });
+          (t.o || []).forEach(function (k) { if (k >= 1 && k <= cnt) o.push(start + k); });
+          ocrLeft = Math.max(0, ocrLeft - ocr0);
+          if (t.cut) cut = true;
+          if (cnt) f.push([String(it.s), String(it.n || ""), start, cnt]); else fe++;
+        }, function (e) { if (e && (e.code === "busy" || e.code === "lock" || e.net)) throw e; fe++; });
+      }).then(step);
+    };
+    return step();
+  });
+}
 function dxTcText(tc) {
   var out = "";
   ((tc && tc.items) || []).forEach(function (it) { if (!it || typeof it.str !== "string") return; out += it.str; if (it.hasEOL) out += "\n"; });
@@ -7205,22 +7667,23 @@ function dxTcText(tc) {
 }
 function dxWeak(t) { return String(t || "").replace(/[^0-9A-Za-z㐀-鿿豈-﫿]/g, "").length < 8; }
 var DX_OCR_PG = 40;
-function dxPdfText(d, bytes) {
+function dxPdfText(d, bytes, lim) {
+  var fx = lim && lim.st ? { fi: lim.st.i, fn: lim.st.n, fnm: lim.st.nm } : null;
   return fvLib().then(function (lib) {
     var task = lib.getDocument({ data: bytes, isEvalSupported: false, CMapReaderFactory: FvCMap, cMapPacked: true, useSystemFonts: true, enableXfa: false, disableAutoFetch: true, disableStream: true, disableRange: true, verbosity: 0 });
     return task.promise.then(function (doc) {
-      var n = doc.numPages, N = Math.min(n, YZ_DX_PG), p = [], o = [], left = YZ_DX_MAX, ocrLeft = DX_OCR_PG, cut = n > N, i = 0;
+      var n = doc.numPages, N = Math.min(n, lim ? Math.max(0, lim.pg) : YZ_DX_PG), p = [], o = [], left = lim ? Math.max(0, lim.chars) : YZ_DX_MAX, ocrLeft = lim ? Math.max(0, lim.ocr) : DX_OCR_PG, cut = n > N, i = 0;
       var fin = function () { try { doc.destroy(); } catch (e) {  } return { p: p, n: n, o: o, cut: cut ? 1 : 0 }; };
       var step = function () {
         if (i >= N) return fin();
         if (left <= 0) { cut = true; return fin(); }
         var k = ++i;
-        dxSt(d.key, { ph: "pdf", pg: k, n: N });
+        dxSt(d.key, Object.assign({ ph: "pdf", pg: k, n: N }, fx || {}));
         return doc.getPage(k).then(function (pg) {
           return pg.getTextContent().then(function (tc) {
             var t = dxTcText(tc);
             if (!dxWeak(t) || ocrLeft <= 0) return t;
-            ocrLeft--; dxSt(d.key, { ph: "ocr", pg: k, n: N });
+            ocrLeft--; dxSt(d.key, Object.assign({ ph: "ocr", pg: k, n: N }, fx || {}));
             return dxPageOcr(pg).then(function (t2) { if (t2) o.push(k); return t2 ? (t ? t + "\n" + t2 : t2) : t; }, function (e) { if (e && (e.code === "busy" || e.code === "lock" || e.net)) throw e; return t; });
           }).then(function (t) {
             if (t.length > left) { t = t.slice(0, left); cut = true; }
@@ -7285,12 +7748,16 @@ function dxStat(x) {
   var key = _yzDxKey_(x.u);
   if (!edDxDocs().some(function (d) { return d.key === key; })) return { t: lab + "：存檔以後在背景讀（讀了，搜尋才找得到裡面的字）", c: "" };
   var st = DX.st[key];
-  if (st) return { t: lab + "：" + (st.ph === "src" ? "拿檔案中…" : st.ph === "pdf" ? "讀第 " + st.pg + "／" + st.n + " 頁…" : st.ph === "ocr" ? "第 " + st.pg + "／" + st.n + " 頁整頁是圖：辨識中…" : st.ph === "img" ? "圖片辨識中…" : st.ph === "web" ? "拿網頁的字中…" : "存起來…"), c: "run" };
+  if (st) {
+    var fpre = st.fi ? "資料夾的第 " + st.fi + "／" + st.fn + " 個檔「" + st.fnm + "」：" : "";
+    return { t: lab + "：" + fpre + (st.ph === "src" ? "拿檔案中…" : st.ph === "fold" ? "拿檔案中…" : st.ph === "pdf" ? "讀第 " + st.pg + "／" + st.n + " 頁…" : st.ph === "ocr" ? "第 " + st.pg + "／" + st.n + " 頁整頁是圖：辨識中…" : st.ph === "img" ? "圖片辨識中…" : st.ph === "web" ? "拿網頁的字中…" : "存起來…"), c: "run" };
+  }
   if (DX.bad[key]) return { t: "⚠ " + lab + "讀不到：" + DX.bad[key], c: "warn", re: 1 };
   if (!DX.meta) return { t: lab + "：" + (DX.err ? "⚠ " + DX.err : "看看讀過了沒…"), c: DX.err ? "warn" : "", re: DX.err ? 1 : 0 };
   var m = DX.meta[key];
   if (!m) return { t: lab + "：還沒讀（等一下在背景讀）", c: "" };
   if (m.err) return { t: "⚠ " + lab + "讀不到：" + m.err + "（" + dxAgo(m.t) + "；一天以後會再試）", c: "warn", re: 1 };
+  if (m.k === "folder") return { t: "📁 資料夾裡的檔的字（搜尋找得到）：讀了 " + (+m.fr || 0) + "／" + (+m.nf || 0) + " 個檔、" + m.n + " 頁、" + (+m.len || 0).toLocaleString() + " 個字" + (m.fe ? "（" + m.fe + " 個讀不到）" : "") + (m.o ? "（" + m.o + " 頁整頁是圖：辨識的）" : "") + (m.cut ? "（太多：只存前面的）" : "") + "｜" + dxAgo(m.t) + "讀的", c: "ok", re: 1, view: 1 };
   var img = kind === "img" || m.k === "img";
   return { t: (img ? "📄 圖片裡的字" : lab) + "（搜尋找得到）：" + (kind === "web" || img ? "" : m.n + " 頁、") + (+m.len || 0).toLocaleString() + " 個字" + (img ? "（圖片：辨識的）" : m.o ? "（" + m.o + " 頁整頁是圖：辨識的）" : "") + (m.cut ? "（太長：只存前面的）" : "") + "｜" + dxAgo(m.t) + "讀的", c: "ok", re: 1, view: 1 };
 }
@@ -7321,7 +7788,12 @@ function dxView(key, label) {
     var e = r && r.ok ? r.e : null;
     if (!e || !Array.isArray(e.p)) { box.appendChild(h("p", { class: "muted" }, [r && r.err ? "⚠ " + r.err : "還沒有讀到的字"])); return; }
     var ocr = {}; (e.o || []).forEach(function (k) { ocr[k] = 1; });
-    e.p.forEach(function (t, i) { box.appendChild(h("div", { class: "dxpg" }, [h("b", {}, [(e.k === "web" ? "網頁" : "第 " + (i + 1) + " 頁") + (ocr[i + 1] ? "（整頁是圖：辨識的）" : "")]), h("pre", {}, [t || "（這一頁沒有字）"])])); });
+    var fst = {}; (Array.isArray(e.f) ? e.f : []).forEach(function (x) { if (Array.isArray(x)) fst[+x[2]] = x; });
+    e.p.forEach(function (t, i) {
+      var fo = e.f ? _yzDxFileOf_(e, i + 1) : null;
+      if (fst[i]) box.appendChild(h("h4", { class: "dxfd" }, ["📄 " + String(fst[i][1] || "檔案") + "（" + fst[i][3] + " 頁）"]));
+      box.appendChild(h("div", { class: "dxpg" }, [h("b", {}, [(e.k === "web" ? "網頁" : fo ? "第 " + fo.pg + " 頁" : "第 " + (i + 1) + " 頁") + (ocr[i + 1] ? "（整頁是圖：辨識的）" : "")]), h("pre", {}, [t || "（這一頁沒有字）"])]));
+    });
     if (e.cut) box.appendChild(h("p", { class: "muted" }, ["（太長：只存了前面的 " + (+e.n > e.p.length ? e.p.length + " 頁／" : "") + "字）"]));
   }, function (x) { box.innerHTML = ""; box.appendChild(h("p", { class: "muted" }, ["⚠ " + (x && x.message || "連不上後端")])); });
 }
@@ -12293,7 +12765,12 @@ function linkEditor(b) {
         var raw = String(uIn.value || "").trim(), ok = _yzLinkFix_(raw), fk = ok ? _yzLinkFileKind_({ u: ok, k: x.k }) : "", ext = ok && !fk && xvExt({ u: ok, k: x.k }), emb = x.k === "emb";
         var eb = emb && ok && !fk ? (/^http:/i.test(ok) ? "http" : XV.cache[ok] ? xvBlocked(XV.cache[ok], false) : "") : "";
         var web = !ok || fk ? "" : emb ? "直接放在文章裡（嵌入）" + (eb === "http" ? "：⚠ 沒有加密（http），放不進去：讀的人看到那一格寫清楚＋「↗ 另外打開」" : eb ? "：⚠ 這個網站不讓別的網頁放，放不進去：讀的人看到那一格寫清楚＋「↗ 另外打開」（開法改成「網頁：另外打開」比較好）" : "（網站不讓放的：那一格寫清楚＋「↗ 另外打開」）") : x.k === "ext" ? "讀的人點了直接另外打開（新視窗；你選的）" : x.k === "web" ? "讀的人一定在手冊裡的小視窗看（網站不讓放：小視窗裡寫清楚＋「↗ 另外打開」）" : ext ? (/^http:/i.test(ok) ? "沒有加密（http）" : "這個網站不讓手冊放（或要先登入）") + " → 讀的人點了直接另外打開（新視窗）" : "讀的人在手冊裡的小視窗看；網站不讓放、要先登入的，會自動另外打開（在手冊裡打不開的：開法選「網頁：另外打開」）";
-        msg.textContent = !raw ? "還沒填網址（沒填的不會出現在 LINE、網頁）" : !ok ? "⚠ 網址要 https:// 或 http:// 開頭，中間不能有空白" : fk ? "✓ " + YZ_FILE_ICO[fk] + " " + YZ_FILE_NAME[fk] + "：" + (emb ? "直接放在文章裡（嵌入；只能看，不能下載、列印）" : "讀的人在手冊裡的小視窗看（只能看，不能下載、列印）") + (x.t ? "" : "（沒填顯示的字：用網站名稱）") : "✓ 網頁 " + _yzLinkHost_(ok) + "：" + web + (x.t ? "" : "（沒填顯示的字：用網站名稱）");
+        var cl = ok && typeof _yzCloudOf_ === "function" ? _yzCloudOf_(ok) : null;
+        var clNote = !cl ? "" : cl.p === "od" ? "（OneDrive 個人的連結：指令碼屬性要設 OD_APP_ID，第 55 批的說明檔有寫）" : cl.p === "sp" ? "（OneDrive 公司版／SharePoint：分享要設成「任何人」才看得到；只有機構內的人看得到的不行）" : cl.p === "icl" ? "（iCloud：只能分享單一個檔，資料夾不行；分享設成「知道連結的人都能看」）" : cl.p === "gd" ? "（資料夾要分享給藥戰手冊的 Google 帳號：檢視者就可以，不用公開）" : "（分享要設成「知道連結的人都能看」）";
+        msg.textContent = !raw ? "還沒填網址（沒填的不會出現在 LINE、網頁）" : !ok ? "⚠ 網址要 https:// 或 http:// 開頭，中間不能有空白" :
+          fk && cl ? "✓ " + YZ_FILE_ICO[fk] + " " + _yzCloudDe_(cl.name) + (fk === "folder" ? "資料夾：讀的人" + (emb ? "在文章裡的那一格" : "在手冊裡的小視窗") + "看到裡面的檔（Word、Excel、PPT、PDF、圖片）的清單，點了就看（只能看）" : (fk === "file" ? "檔（也可能是資料夾：打開才知道）" : " " + YZ_FILE_NAME[fk] + " 檔") + "：" + (emb ? "直接放在文章裡（嵌入；只能看，不能下載、列印）" : "讀的人在手冊裡的小視窗看（只能看，不能下載、列印）")) + clNote + (x.t ? "" : "（沒填顯示的字：用網站名稱）") :
+          fk ? "✓ " + YZ_FILE_ICO[fk] + " " + YZ_FILE_NAME[fk] + "：" + (emb ? "直接放在文章裡（嵌入；只能看，不能下載、列印）" : "讀的人在手冊裡的小視窗看（只能看，不能下載、列印）") + (x.t ? "" : "（沒填顯示的字：用網站名稱）") :
+          "✓ 網頁 " + _yzLinkHost_(ok) + "：" + web + (cl && !YZ_CLOUD && x.k !== "web" && x.k !== "ext" ? "（" + cl.name + " 的分享連結：藥戰手冊專案的 02、03 換成第 55 批以後，才會當成檔案在手冊裡看）" : "") + (x.t ? "" : "（沒填顯示的字：用網站名稱）");
         msg.className = "lk-m" + (raw && !ok ? " bad" : ok ? " ok" : "") + (ext || eb ? " ext" : "");
         ico.textContent = fk ? YZ_FILE_ICO[fk] : "🌐";
         szRow.hidden = x.k !== "emb";
@@ -12330,7 +12807,7 @@ function linkEditor(b) {
   paint();
   wrap.appendChild(list);
   wrap.appendChild(h("div", { class: "lk-add" }, [add]));
-  wrap.appendChild(hint("開法「自動」（第 48 批）：網頁在手冊裡的小視窗看；網站自己規定不讓別的網頁放、要先登入的（付費的資料庫常這樣）、沒有加密（http）的 → 讀的人點了直接另外打開（電腦：右邊的小視窗；手機：新分頁；LINE：直接開那個網址），不用再多按一次。網站讓不讓放是後端去看的（打好網址、按「↗ 試開」、每次打開編輯器都會看）。後端看不出來的（例如院內網路才打得開的網站）：開法選「網頁：另外打開（新視窗）」（第 49 批），一律另外打開。「網頁：一定在手冊裡看」＝不管網站讓不讓都先放進小視窗（不讓的：寫清楚＋「↗ 另外打開」）。網址是檔案（Word、PDF、Excel、PPT、圖片；Google 文件、試算表、簡報、雲端硬碟的檔）→ 只能看，不能下載、列印，有浮水印。院內網路、SharePoint 這種要登入的檔案後端拿不到：請放雲端硬碟（分享給藥戰手冊的 Google 帳號就好，不用公開）。YouTube、Vimeo 的影片可以直接在小視窗播。開法「嵌入」（第 50 批）：Word、PPT、PDF、Excel、圖片、網頁直接放在文章裡（一格，裡面可以上下捲；捲到才拿；「⛶ 放大」用小視窗看）；檔案一樣只能看；網站不讓別的網頁放的，那一格寫清楚＋「↗ 另外打開」；LINE 不能嵌入，照「在手冊裡看」。第 52 批：嵌入框的大小可以選（高度：整頁／大／中／小；寬度：整欄／3/4／一半）。顯示的字、說明搜尋找得到；第 52 批：檔案（不管開法）、嵌入的網頁裡面的字也找得到（存檔以後在背景讀，每一個連結下面寫讀好了沒）。Word 匯出寫「名稱：網址」。"));
+  wrap.appendChild(hint("開法「自動」（第 48 批）：網頁在手冊裡的小視窗看；網站自己規定不讓別的網頁放、要先登入的（付費的資料庫常這樣）、沒有加密（http）的 → 讀的人點了直接另外打開（電腦：右邊的小視窗；手機：新分頁；LINE：直接開那個網址），不用再多按一次。網站讓不讓放是後端去看的（打好網址、按「↗ 試開」、每次打開編輯器都會看）。後端看不出來的（例如院內網路才打得開的網站）：開法選「網頁：另外打開（新視窗）」（第 49 批），一律另外打開。「網頁：一定在手冊裡看」＝不管網站讓不讓都先放進小視窗（不讓的：寫清楚＋「↗ 另外打開」）。網址是檔案（Word、PDF、Excel、PPT、圖片；Google 文件、試算表、簡報、雲端硬碟的檔）→ 只能看，不能下載、列印，有浮水印。院內網路這種要登入的檔案後端拿不到：請放雲端硬碟（Google 雲端硬碟分享給藥戰手冊的 Google 帳號就好，不用公開）。第 55 批：各家雲端硬碟的分享連結也可以（Google 雲端硬碟的資料夾、OneDrive、OneDrive 公司版／SharePoint、Dropbox、iCloud、pCloud、MEGA、Box、Yandex；分享要設成「知道連結的人都能看」）：分享的是資料夾＝讀的人看到裡面的檔的清單，點了就看（iCloud 的資料夾不行）。YouTube、Vimeo 的影片可以直接在小視窗播。開法「嵌入」（第 50 批）：Word、PPT、PDF、Excel、圖片、網頁直接放在文章裡（一格，裡面可以上下捲；捲到才拿；「⛶ 放大」用小視窗看）；檔案一樣只能看；網站不讓別的網頁放的，那一格寫清楚＋「↗ 另外打開」；LINE 不能嵌入，照「在手冊裡看」。第 52 批：嵌入框的大小可以選（高度：整頁／大／中／小；寬度：整欄／3/4／一半）。顯示的字、說明搜尋找得到；第 52 批：檔案（不管開法）、嵌入的網頁裡面的字也找得到（存檔以後在背景讀，每一個連結下面寫讀好了沒）。Word 匯出寫「名稱：網址」。"));
   return wrap;
 }
 
@@ -17519,7 +17996,7 @@ function pcDraw(box, r, blob, blob7, xx) {
   }, "sm pri pcdl");
   var ckm = h("span", { class: "hint", id: "pcckm", role: "status", "aria-live": "polite" }, [""]);
   var ck = btn("🔄 檢查 GitHub 上的 cfg.js", function () { pcCheck(true); }, "sm pcck");
-  box.appendChild(h("p", { class: "pcst warn", id: "pcst" }, ["⏳ 要換一次 cfg.js：按「⬇️ 下載 cfg.js」，傳到 GitHub（跟 hb.html 放同一層，同名的蓋掉），1～2 分鐘後按「🔄 檢查」。換好以前，同事在 LINE「🔗 外部連結」拿到的短碼比較長（照樣能用）；換好以後變短，這一段就不再出現。"]));
+  box.appendChild(h("p", { class: "pcst warn", id: "pcst" }, ["⏳ 要換一次 cfg.js：按「⬇️ 下載 cfg.js」，傳到 GitHub（跟手冊網頁 hb.html 或 index.html 放同一層，同名的蓋掉），1～2 分鐘後按「🔄 檢查」。換好以前，同事在 LINE「🔗 外部連結」拿到的短碼比較長（照樣能用）；換好以後變短，這一段就不再出現。"]));
   box.appendChild(h("div", { class: "pcurlrow" }, [dl, ck, ckm]));
   var pcCheck = function (say) {
     ck.disabled = true; ckm.textContent = say ? "檢查中…" : "";
@@ -17592,7 +18069,7 @@ function drawUsers() {
     h("div", { class: "hint", style: "flex:1 1 240px;min-width:0;margin:0" }, ["核可 " + nOk + " 人、等審核 " + nW + " 人；開發者 " + AD.devs + " 位（固定可以看；已核可的人可以按「👑 設為開發者」，開發者那一列可以「取消開發者」）" + (nOff ? "，其中 " + nOff + " 位不在名單上（要取消，改藥戰手冊專案的指令碼屬性 DEV_USERS）" : "") + "。撤銷、拒絕＝從名單刪掉，要再看得重新申請。" +
       (AD.cards ? "審核卡（有人申請、對不上員工名單）：LINE 只送給「📩 收審核卡」的開發者（現在 " + AD.cardN + " 位）；開發者那一列按一下可以切換。" : "")]),
     clr]));
-  var nMatch = rows.filter(function (u) { return u.st === "wait" && (u.ck === "ok" || u.ck === "near"); }).length;
+  var nMatch = rows.filter(function (u) { return u.st === "wait" && u.ck === "ok"; }).length;
   if (nMatch) box.appendChild(h("div", { class: "acts", style: "margin:2px 0 8px" }, [btn("✅ 核可對得上員工名單的 " + nMatch + " 人", function (e) { adAuto(e.target, nMatch); }, "sm pri adauto")]));
   if (!rows.length) { box.appendChild(h("div", { class: "muted", style: "padding:8px 0" }, ["還沒有人申請。同事在 LINE 的「藥戰手冊」打員工編號＋姓名（或在手冊網頁填），對不上員工名單的會出現在這裡等你核可。"])); return; }
   var narrow = (box.clientWidth || window.innerWidth) < 560;
@@ -17631,8 +18108,8 @@ function drawUsers() {
 }
 function adRmk(u) {
   if (u.st === "dev" || !u.ck) return null;
-  var ok = u.ck === "ok" || u.ck === "near", t = "", cls = "rmk";
-  if (u.st === "wait") { t = ok ? "✅ 對得上員工名單" + (u.ck === "near" ? "（姓名差一個字）" : "") : "⚠ " + (u.cw || u.rm || "跟員工名單對不上"); cls += ok ? " good" : " warn"; }
+  var ok = u.ck === "ok", t = "", cls = "rmk";
+  if (u.st === "wait") { t = ok ? "✅ 對得上員工名單" : "⚠ " + (u.cw || u.rm || "跟員工名單對不上"); cls += ok ? " good" : " warn"; }
   else if (u.st === "ok") {
     if (ok) return u.by === "（員工名單自動核可）" ? h("div", { class: "rmk muted" }, ["員工名單自動核可"]) : null;
     t = u.ck === "none" ? "⚠ 員工名單上沒有這個人（離職了？）" : u.ck === "used" ? "⚠ " + (u.cw || "員工編號跟別人重複") : "⚠ 跟員工名單對不上：" + (u.cw || "");
@@ -17642,7 +18119,7 @@ function adRmk(u) {
 }
 function adAuto(el, n) {
   if (AD.busy) return;
-  modal({ title: "核可對得上員工名單的 " + n + " 人？", lines: ["等審核的人裡，員工編號、姓名跟員工名單對得上的（姓名差一個字也算），一次核可。每個人的 LINE 都會收到通知。", "對不上的不動，照樣等你看。"], buttons: [{ label: "不要", cls: "sm" }, { label: "核可 " + n + " 人", cls: "sm pri", fn: function () {
+  modal({ title: "核可對得上員工名單的 " + n + " 人？", lines: ["等審核的人裡，員工編號、姓名跟員工名單一模一樣的，一次核可。每個人的 LINE 都會收到通知。", "對不上的（包括姓名只差一個字、差在空白或異體字的）不動，照樣等你看。"], buttons: [{ label: "不要", cls: "sm" }, { label: "核可 " + n + " 人", cls: "sm pri", fn: function () {
     AD.busy = true; if (el) el.disabled = true;
     call("hbUserAuto", []).then(function (r) {
       AD.busy = false;
@@ -17848,7 +18325,7 @@ function rsMsg(t) { var m = $("#rsMsg"); if (m) m.textContent = t || ""; }
 function drawRoster() {
   var box = $("#rsBox"); if (!box) return; box.innerHTML = "";
   var rs = AD.rs || { n: 0, rows: [] }, meta = rs.meta || {};
-  box.appendChild(h("div", { class: "hint", style: "margin:0 0 8px" }, [rs.n ? "名單上 " + rs.n + " 人" + (meta.at && (meta.n === undefined || meta.n === rs.n) ? "（" + meta.at + (meta.by ? "　" + meta.by : "") + " " + (meta.how || "匯入") + "）" : "") + "。同事申請時打的員工編號＋姓名跟這份對得上，就自動核可（姓名差一個字也算；一個員工編號只給一個 LINE 帳號）。對不上的照樣交給你審核。"
+  box.appendChild(h("div", { class: "hint", style: "margin:0 0 8px" }, [rs.n ? "名單上 " + rs.n + " 人" + (meta.at && (meta.n === undefined || meta.n === rs.n) ? "（" + meta.at + (meta.by ? "　" + meta.by : "") + " " + (meta.how || "匯入") + "）" : "") + "。同事申請時打的員工編號＋姓名跟這份對得上，就自動核可（姓名要一模一樣：差一個字、差在空白或異體字的都交給你審核；一個員工編號只給一個 LINE 帳號）。對不上的照樣交給你審核。"
     : "還沒匯入。匯入以後，同事申請時打的員工編號＋姓名跟這份對得上，就自動核可，不用你一個一個按。也可以按「＋ 新增一位」自己打。"]));
   var file = h("input", { type: "file", accept: ".xlsx,.csv,.txt,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", hidden: true, "aria-label": "選員工名單的檔案" });
   file.onchange = function () { var f = file.files && file.files[0]; file.value = ""; if (f) rsReadFile(f); };
